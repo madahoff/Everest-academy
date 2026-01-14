@@ -1,0 +1,264 @@
+// Prisma Schema for Everest Admin
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Role {
+  ADMIN
+  INSTRUCTOR
+  STUDENT
+}
+
+enum Plan {
+  FREE
+  PREMIUM
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CourseStatus {
+  ACTIVE
+  DRAFT
+}
+
+enum ProductStatus {
+  IN_STOCK
+  OUT_OF_STOCK
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// Models
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  emailVerified  DateTime?       // Required for OAuth
+  password       String?         // Hash password (optional for OAuth users)
+  image          String?
+  role           Role            @default(STUDENT)
+  plan           Plan            @default(FREE)
+  status         UserStatus      @default(ACTIVE)
+  walletBalance  Decimal         @default(0.00) @db.Decimal(10, 2)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  accounts       Account[]       // OAuth accounts
+  sessions       Session[]       // User sessions
+  favorites      Favorite[]
+  purchases      Purchase[]
+  cart           CartItem[]
+  accessCodes    AccessCode[]
+  sectionRatings SectionRating[]
+
+  @@map("users")
+}
+
+// OAuth Account model for NextAuth.js
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// Session model for NextAuth.js
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// Verification Token for email verification
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+  @@map("favorites")
+}
+
+model Course {
+  id           String       @id @default(cuid())
+  title        String
+  description  String       @db.Text
+  heroImage    String       // Grande image CTA pour page de détail
+  cardImage    String       // Petite image pour cards/listes
+  welcomeVideo String       // URL vidéo de présentation
+  price        Decimal      @db.Decimal(10, 2)
+  duration     String       @default("Variable") // Durée du cours (ex: "2h 30min", "5 semaines")
+  level        CourseLevel  @default(INTERMEDIATE) // Niveau du cours
+  status       CourseStatus @default(DRAFT)
+  salesCount   Int          @default(0)
+  favorites    Favorite[]
+  sections     Section[]
+  purchases    Purchase[]
+  cartItems    CartItem[]
+  accessCodes  AccessCode[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("courses")
+}
+
+model Section {
+  id          String          @id @default(cuid())
+  courseId    String
+  course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String          @db.Text
+  heroImage   String          // Grande image CTA section
+  cardImage   String          // Image moyenne pour cards
+  video       String          // Vidéo pédagogique
+  summary     String          @db.Text // Résumé pour révision
+  duration    String?         // Durée estimée (ex: "15 min")
+  order       Int             @default(0)
+  questions   Question[]
+  ratings     SectionRating[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("sections")
+}
+
+model SectionRating {
+  id        String   @id @default(cuid())
+  sectionId String
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int      // 1-5 stars
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sectionId, userId]) // One rating per user per section
+  @@map("section_ratings")
+}
+
+model Question {
+  id        String   @id @default(cuid())
+  sectionId String
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  text      String   @db.Text
+  order     Int      @default(0)
+  answers   Answer[]
+  createdAt DateTime @default(now())
+
+  @@map("questions")
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int      @default(0)
+
+  @@map("answers")
+}
+
+model Product {
+  id        String        @id @default(cuid())
+  name      String
+  category  String
+  price     Decimal       @db.Decimal(10, 2)
+  stock     Int           @default(0)
+  status    ProductStatus @default(IN_STOCK)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  
+  purchases Purchase[]
+  cartItems CartItem[]
+
+  @@map("products")
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String?
+  course    Course?  @relation(fields: [courseId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  @@map("purchases")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String?
+  course    Course?  @relation(fields: [courseId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId]) // Prevent duplicate course in cart
+  @@map("cart_items")
+}
+
+model AccessCode {
+  id        String    @id @default(cuid())
+  code      String    @unique // Format: "EVEREST-XXXX-XXXX"
+  courseId  String
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  used      Boolean   @default(false)
+  usedById  String?
+  usedBy    User?     @relation(fields: [usedById], references: [id])
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Optional: expiration date
+
+  @@map("access_codes")
+}

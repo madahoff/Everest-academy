@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: everest_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: everest_admin
+      MYSQL_USER: everest
+      MYSQL_PASSWORD: everest
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+    container_name: everest_admin
+    restart: always
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=mysql://everest:everest@db:3306/everest_admin
+      - NODE_ENV=development
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+      - AUTH_SECRET=secret123
+      - NEXTAUTH_SECRET=secret123
+      - NEXTAUTH_URL=http://localhost:3001
+    volumes:
+      - ./apps/admin:/app
+      - /app/node_modules
+      - /app/.next
+      # Shared uploads volume - mounted in admin's public folder
+      - shared_uploads:/app/public/uploads
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: everest_web
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+    environment:
+      - DATABASE_URL=mysql://everest:everest@db:3306/everest_admin
+      - NODE_ENV=development
+      - NEXTAUTH_SECRET=secret123
+      - NEXTAUTH_URL=http://localhost:3000
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+      # Shared uploads volume - mounted in web's public folder
+      - shared_uploads:/app/public/uploads
+
+volumes:
+  mysql_data:
+  shared_uploads:
