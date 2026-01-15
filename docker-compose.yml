@@ -43,13 +43,13 @@ services:
     labels:
       - "traefik.enable=true"
       # HTTPS Router
-      - "traefik.http.routers.everest-admin-secure.rule=Host(`${ADMIN_DOMAIN}`)"
+      - "traefik.http.routers.everest-admin-secure.rule=Host(`admin.everest.madahoff.com`)"
       - "traefik.http.routers.everest-admin-secure.entrypoints=websecure"
       - "traefik.http.routers.everest-admin-secure.tls=true"
       - "traefik.http.routers.everest-admin-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.everest-admin-secure.service=everest-admin-service"
       # HTTP Router (redirect to HTTPS)
-      - "traefik.http.routers.everest-admin.rule=Host(`${ADMIN_DOMAIN}`)"
+      - "traefik.http.routers.everest-admin.rule=Host(`admin.everest.madahoff.com`)"
       - "traefik.http.routers.everest-admin.entrypoints=web"
       - "traefik.http.routers.everest-admin.middlewares=redirect-to-https"
       # Service
@@ -79,13 +79,13 @@ services:
     labels:
       - "traefik.enable=true"
       # HTTPS Router
-      - "traefik.http.routers.everest-web-secure.rule=Host(`${WEB_DOMAIN}`)"
+      - "traefik.http.routers.everest-web-secure.rule=Host(`everest.madahoff.com`)"
       - "traefik.http.routers.everest-web-secure.entrypoints=websecure"
       - "traefik.http.routers.everest-web-secure.tls=true"
       - "traefik.http.routers.everest-web-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.everest-web-secure.service=everest-web-service"
       # HTTP Router (redirect to HTTPS)
-      - "traefik.http.routers.everest-web.rule=Host(`${WEB_DOMAIN}`)"
+      - "traefik.http.routers.everest-web.rule=Host(`everest.madahoff.com`)"
       - "traefik.http.routers.everest-web.entrypoints=web"
       - "traefik.http.routers.everest-web.middlewares=redirect-to-https"
       # Service
