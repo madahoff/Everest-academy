@@ -3,6 +3,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["https://everest.madahoff.com", "http://everest.madahoff.com"],
   outputFileTracingRoot: path.join(__dirname, "../../"),
 
   // Important pour monorepo
