@@ -11,6 +11,9 @@ import { QuizSection } from "@/components/quiz-section";
 import { SectionRating } from "@/components/section-rating";
 import { CourseNavigation } from "@/components/course-navigation";
 
+// Force dynamic rendering to avoid database access at build time
+export const dynamic = 'force-dynamic';
+
 // --- COMPOSANT PRINCIPAL (Server Component) ---
 
 export default async function SectionPage({ params }: { params: Promise<{ courseId: string, pathId: string }> }) {
