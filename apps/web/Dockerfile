@@ -50,7 +50,7 @@ COPY --from=builder /app/apps/web/prisma ./apps/web/prisma
 
 USER nextjs
 
-EXPOSE 3000
+ENV NEXT_TELEMETRY_DISABLED 1
 
 # Script to sync DB and start server
-CMD ["sh", "-c", "npx prisma db push --schema=apps/web/prisma/schema.prisma --skip-generate && node server.js"]
+CMD ["sh", "-c", "npx prisma db push --schema=apps/web/prisma/schema.prisma --skip-generate && node apps/web/server.js"]
