@@ -10,47 +10,53 @@ COPY . .
 RUN turbo prune admin --docker
 
 FROM base AS builder
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 
-# First copy pruned json to install dependencies (layer caching)
+# Install dependencies
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --ignore-scripts
+RUN pnpm install --frozen-lockfile
 
-# Copy pruned source and build
+# Copy source
 COPY --from=pruner /app/out/full/ .
 COPY turbo.json turbo.json
 
-# Generate Prisma Client (needed for build)
+# Generate Prisma Client
 RUN pnpm prisma generate --schema=apps/admin/prisma/schema.prisma
 
-# Environment variables for build time
+# Build with production environment
 ENV NODE_ENV=production
-RUN pnpm run build --filter=admin
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm turbo run build --filter=admin
 
-FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl
+# Verify build succeeded
+RUN ls -la apps/admin/.next/standalone || (echo "Build failed - no standalone output" && exit 1)
+
+FROM base AS runner
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3001
 ENV HOSTNAME="0.0.0.0"
 
-# Don't run production as root
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy standalone build
-COPY --from=builder /app/apps/admin/.next/standalone ./
-COPY --from=builder /app/apps/admin/.next/static ./apps/admin/.next/static
-COPY --from=builder /app/apps/admin/public ./apps/admin/public
-# Copy schema for runtime db sync if needed
+# Copy built application
+COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/.next/static ./apps/admin/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/public ./apps/admin/public
+
+# Copy Prisma files
 COPY --from=builder /app/apps/admin/prisma ./apps/admin/prisma
+COPY --from=builder /app/node_modules/.prisma/client ./node_modules/.prisma/client
 
 USER nextjs
 
-ENV NEXT_TELEMETRY_DISABLED 1
+EXPOSE 3001
 
-# Script to sync DB and start server
-CMD ["sh", "-c", "npx prisma db push --schema=apps/admin/prisma/schema.prisma --skip-generate && node apps/admin/server.js"]
+# Migration et démarrage
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=apps/admin/prisma/schema.prisma && node apps/admin/server.js"]
