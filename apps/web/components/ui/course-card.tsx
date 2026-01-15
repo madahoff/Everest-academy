@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,8 +68,8 @@ export const CourseCard = ({ course, userType, onLike, onAddToCart }: CourseCard
         >
           <Heart
             className={`h-4 w-4 ${course.isLiked
-                ? "fill-destructive text-destructive"
-                : "text-muted-foreground hover:text-destructive"
+              ? "fill-destructive text-destructive"
+              : "text-muted-foreground hover:text-destructive"
               }`}
           />
         </button>
@@ -134,7 +134,7 @@ export const CourseCard = ({ course, userType, onLike, onAddToCart }: CourseCard
 
       <CardFooter className="pt-0">
         {canAccess ? (
-          <Link to={`/courses/${course.id}`} className="w-full">
+          <Link href={`/courses/${course.id}`} className="w-full">
             <Button className="w-full btn-educational">
               {course.progress !== undefined ? "Continuer" : "Commencer"}
             </Button>
@@ -149,7 +149,7 @@ export const CourseCard = ({ course, userType, onLike, onAddToCart }: CourseCard
               <ShoppingCart className="h-4 w-4 mr-2" />
               Acheter
             </Button>
-            <Link to={`/courses/${course.id}`} className="flex-1">
+            <Link href={`/courses/${course.id}`} className="flex-1">
               <Button variant="secondary" className="w-full">
                 Voir
               </Button>

@@ -1,9 +1,15 @@
 {
   "name": "everest-monorepo",
   "private": true,
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
     "dev": "docker-compose up --build -V",
-    "build": "pnpm -r run build",
-    "lint": "pnpm -r run lint"
+    "dev:local": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "baseline-browser-mapping": "^2.9.14",
+    "turbo": "^2.7.4"
   }
 }
