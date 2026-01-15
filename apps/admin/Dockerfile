@@ -53,4 +53,4 @@ USER nextjs
 EXPOSE 3001
 
 # Script to sync DB and start server
-CMD ["sh", "-c", "npx prisma db push --schema=apps/admin/prisma/schema.prisma --skip-generate && node apps/admin/server.js"]
+CMD ["sh", "-c", "npx prisma db push --schema=apps/admin/prisma/schema.prisma --skip-generate && node server.js"]
