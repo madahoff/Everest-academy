@@ -23,7 +23,7 @@ COPY --from=pruner /app/out/full/ .
 COPY turbo.json turbo.json
 
 # Generate Prisma Client
-RUN pnpm prisma generate --schema=apps/web/prisma/schema.prisma
+RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 
 # Build with production environment
 ENV NODE_ENV=production
