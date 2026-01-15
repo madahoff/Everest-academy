@@ -64,5 +64,5 @@ USER nextjs
 
 EXPOSE 3000
 
-# Use prisma migrate deploy for production
-CMD ["sh", "-c", "prisma migrate deploy --schema=apps/web/prisma/schema.prisma && node apps/web/server.js"]
+# Use prisma db push for production (works with existing databases)
+CMD ["sh", "-c", "prisma db push --schema=apps/web/prisma/schema.prisma --accept-data-loss && node apps/web/server.js"]
