@@ -7,7 +7,7 @@ FROM base AS pruner
 RUN pnpm add -g turbo
 WORKDIR /app
 COPY . .
-RUN npx turbo prune admin --docker
+RUN turbo prune admin --docker
 
 FROM base AS builder
 RUN apk add --no-cache openssl
@@ -25,11 +25,17 @@ COPY turbo.json turbo.json
 # Generate Prisma Client (needed for build)
 RUN pnpm prisma generate --schema=apps/admin/prisma/schema.prisma
 
-# Build the admin app
+# Environment variables for build time
+ENV NODE_ENV=production
 RUN pnpm run build --filter=admin
 
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV HOSTNAME="0.0.0.0"
 
 # Don't run production as root
 RUN addgroup --system --gid 1001 nodejs
@@ -39,12 +45,12 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/apps/admin/.next/standalone ./
 COPY --from=builder /app/apps/admin/.next/static ./apps/admin/.next/static
 COPY --from=builder /app/apps/admin/public ./apps/admin/public
+# Copy schema for runtime db sync if needed
+COPY --from=builder /app/apps/admin/prisma ./apps/admin/prisma
 
 USER nextjs
 
 EXPOSE 3001
 
-ENV PORT=3001
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["node", "apps/admin/server.js"]
+# Script to sync DB and start server
+CMD ["sh", "-c", "npx prisma db push --schema=apps/admin/prisma/schema.prisma --skip-generate && node apps/admin/server.js"]

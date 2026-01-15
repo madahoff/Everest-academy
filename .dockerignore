@@ -1,0 +1,13 @@
+node_modules
+.next
+.turbo
+apps/**/node_modules
+apps/**/.next
+apps/**/dist
+.git
+.env
+.env.local
+.DS_Store
+*.log
+docker-compose.yml
+Dockerfile
