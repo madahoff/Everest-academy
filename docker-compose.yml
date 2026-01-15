@@ -51,7 +51,7 @@ services:
       # HTTP Router (redirect to HTTPS)
       - "traefik.http.routers.everest-admin.rule=Host(`admin.everest.madahoff.com`)"
       - "traefik.http.routers.everest-admin.entrypoints=web"
-      - "traefik.http.routers.everest-admin.middlewares=redirect-to-https"
+      - "traefik.http.routers.everest-admin.middlewares=redirect-to-https@file"
       # Service
       - "traefik.http.services.everest-admin-service.loadbalancer.server.port=3001"
 
@@ -87,7 +87,7 @@ services:
       # HTTP Router (redirect to HTTPS)
       - "traefik.http.routers.everest-web.rule=Host(`everest.madahoff.com`)"
       - "traefik.http.routers.everest-web.entrypoints=web"
-      - "traefik.http.routers.everest-web.middlewares=redirect-to-https"
+      - "traefik.http.routers.everest-web.middlewares=redirect-to-https@file"
       # Service
       - "traefik.http.services.everest-web-service.loadbalancer.server.port=3000"
 
