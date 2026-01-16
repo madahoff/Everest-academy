@@ -50,7 +50,7 @@ function isDirectVideo(url: string): boolean {
     return url.match(/\.(mp4|webm|mov)$/i) !== null || url.includes('/uploads/');
 }
 
-export default function CourseSidebar({ course, isPurchased, isFavorited = false }: { course: any, isPurchased: boolean, isFavorited?: boolean }) {
+export default function CourseSidebar({ course, isPurchased, isFavorited = false, isFree = false }: { course: any, isPurchased: boolean, isFavorited?: boolean, isFree?: boolean }) {
     const router = useRouter();
     const { data: session } = useSession();
     const [loading, setLoading] = useState(false);
@@ -149,6 +149,44 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
         }, 1000);
     };
 
+    // State for free enrollment
+    const [enrollLoading, setEnrollLoading] = useState(false);
+
+    const handleFreeEnroll = async () => {
+        if (!session) {
+            router.push(`/auth/login?callbackUrl=/courses/${course.id}`);
+            return;
+        }
+
+        setEnrollLoading(true);
+
+        try {
+            const res = await fetch(`/api/courses/${course.id}/enroll`, {
+                method: "POST"
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                toast.error(data.error || "Erreur lors de l'inscription");
+                return;
+            }
+
+            toast.success("Inscription réussie !");
+
+            // Redirect to first section
+            if (data.firstSectionId) {
+                router.push(`/courses/${course.id}/${data.firstSectionId}`);
+            } else {
+                router.refresh();
+            }
+        } catch (error) {
+            toast.error("Erreur de connexion");
+        } finally {
+            setEnrollLoading(false);
+        }
+    };
+
     const embedUrl = course.welcomeVideo ? getEmbedUrl(course.welcomeVideo) : null;
     const isNativeVideo = course.welcomeVideo ? isDirectVideo(course.welcomeVideo) : false;
 
@@ -158,20 +196,33 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
 
             {/* Price and CTA */}
             <div className="text-center mb-8">
-                <p className="text-5xl font-black text-[#001F3F] tracking-tighter">{parseFloat(course.price).toLocaleString('fr-FR')} Ar</p>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-2">Accès à vie · Certificat inclus</p>
+                {isFree ? (
+                    <>
+                        <p className="text-5xl font-black text-[#2563EB] tracking-tighter">Gratuit</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-2">Accès à vie · Certificat inclus</p>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-5xl font-black text-[#001F3F] tracking-tighter">{parseFloat(course.price).toLocaleString('fr-FR')} Ar</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-2">Accès à vie · Certificat inclus</p>
+                    </>
+                )}
             </div>
 
             {isPurchased ? (
                 <Button variant="premium" size="lg" className="w-full mb-4" onClick={() => router.push(`/courses/${course.id}/${course.sections?.[0]?.id || ''}`)}>
                     <Play className="w-4 h-4 fill-current" /> Continuer la formation
                 </Button>
+            ) : isFree ? (
+                <Button variant="premium" size="lg" className="w-full mb-4" onClick={handleFreeEnroll} disabled={enrollLoading}>
+                    {enrollLoading ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Inscription...</>
+                    ) : (
+                        <><Sparkles className="w-4 h-4" /> Commencer gratuitement</>
+                    )}
+                </Button>
             ) : (
                 <>
-                    {/* <Button variant="primary" size="lg" className="w-full mb-4" onClick={handleBuy} disabled={loading}>
-                        {loading ? "Chargement..." : "S'inscrire maintenant"}
-                    </Button> */}
-
                     {/* Access Code Section */}
                     <div className="mb-4">
                         <button

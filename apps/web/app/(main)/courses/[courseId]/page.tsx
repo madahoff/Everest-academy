@@ -177,7 +177,7 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
                     </div>
 
                     <div className="lg:col-span-4" id="inscription">
-                        <CourseSidebar course={serializedCourse} isPurchased={isPurchased} isFavorited={isFavorited} />
+                        <CourseSidebar course={serializedCourse} isPurchased={isPurchased} isFavorited={isFavorited} isFree={parseFloat(course.price.toString()) === 0} />
                     </div>
                 </div>
             </main>
