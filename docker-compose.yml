@@ -35,8 +35,11 @@ services:
       - AUTH_SECRET=${AUTH_SECRET}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${ADMIN_URL}
+      - AUTH_TRUST_HOST=true
     volumes:
-      - shared_uploads:/app/public/uploads
+      - shared_uploads:/app/apps/admin/public/uploads
+    ports:
+      - "3001:3001"
     networks:
       - everest-network
       - dokploy-network
@@ -69,10 +72,13 @@ services:
       - NODE_ENV=production
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${WEB_URL}
+      - AUTH_TRUST_HOST=true
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     volumes:
-      - shared_uploads:/app/public/uploads
+      - shared_uploads:/app/apps/web/public/uploads
+    ports:
+      - "3000:3000"
     networks:
       - everest-network
       - dokploy-network
