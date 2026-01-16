@@ -57,6 +57,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/admin/public ./apps/admin/pu
 # Copy Prisma schema for migrations
 COPY --from=builder /app/apps/admin/prisma ./apps/admin/prisma
 
+# Symlink public directory to root for Next.js to serve static files
+RUN ln -s /app/apps/admin/public /app/public
+
 # Install prisma CLI for migrations (minimal install)
 RUN npm install -g prisma@5.22.0
 
