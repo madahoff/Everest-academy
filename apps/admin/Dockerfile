@@ -65,4 +65,4 @@ USER nextjs
 EXPOSE 3001
 
 # Use prisma db push for production (works with existing databases)
-CMD ["sh", "-c", "prisma db push --schema=apps/admin/prisma/schema.prisma --accept-data-loss && node apps/admin/server.js"]
+CMD ["sh", "-c", "prisma db push --schema=apps/admin/prisma/schema.prisma --accept-data-loss --skip-generate && node apps/admin/server.js"]
