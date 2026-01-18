@@ -10,7 +10,8 @@ COPY . .
 RUN turbo prune admin --docker
 
 FROM base AS builder
-RUN apk add --no-cache openssl libc6-compat
+# Install dependencies
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 WORKDIR /app
 
 # Install dependencies
@@ -38,7 +39,8 @@ RUN ls -la node_modules/.prisma/client || echo "Prisma client not in root node_m
 # We just need to ensure the schema is available for migrations
 
 FROM base AS runner
-RUN apk add --no-cache openssl libc6-compat
+# Install dependencies
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 WORKDIR /app
 
 ENV NODE_ENV=production
