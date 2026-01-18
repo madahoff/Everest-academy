@@ -60,6 +60,12 @@ COPY --from=builder /app/apps/admin/prisma ./apps/admin/prisma
 # Symlink public directory to root for Next.js to serve static files
 RUN ln -s /app/apps/admin/public /app/public
 
+# Create uploads directory with proper permissions for the nextjs user
+RUN mkdir -p /app/apps/admin/public/uploads/videos \
+    && mkdir -p /app/apps/admin/public/uploads/images \
+    && mkdir -p /app/apps/admin/public/uploads/misc \
+    && chown -R nextjs:nodejs /app/apps/admin/public/uploads
+
 # Install prisma CLI for migrations (minimal install)
 RUN npm install -g prisma@5.22.0
 
