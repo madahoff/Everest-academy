@@ -154,18 +154,7 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-                    <button
-                        onClick={() => {
-                            setIsSignup(!isSignup)
-                            setError("")
-                            setSuccess("")
-                        }}
-                        className="text-[10px] font-bold uppercase tracking-widest text-[#2563EB] hover:text-[#050505] transition-colors"
-                    >
-                        {isSignup ? "Déjà un compte ? Se connecter" : "Pas encore de compte ? S'inscrire"}
-                    </button>
-                </div>
+                
             </div>
         </div>
     )
