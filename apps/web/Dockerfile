@@ -31,9 +31,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm turbo run build --filter=web
 
-# Verify build succeeded and Prisma client exists
-RUN ls -la apps/web/.next/standalone || (echo "Build failed - no standalone output" && exit 1)
-RUN ls -la node_modules/.prisma/client || echo "Prisma client not in root node_modules, checking standalone..."
+# Verification skipped to avoid runc errors
+# The COPY command in runner stage will fail if build failed
 
 # The standalone output includes node_modules with Prisma client already bundled
 # We just need to ensure the schema is available for migrations
