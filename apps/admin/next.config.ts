@@ -3,7 +3,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ["https://admin.everest.madahoff.com", "http://admin.everest.madahoff.com"],
+  allowedDevOrigins: ["https://admin.academy.pro-everest.com", "http://admin.academy.pro-everest.com"],
   outputFileTracingRoot: path.join(__dirname, "../../"),
 
   // Important pour monorepo : permet à Next.js de tracer les dépendances

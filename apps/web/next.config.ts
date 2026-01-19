@@ -3,7 +3,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ["https://everest.madahoff.com", "http://everest.madahoff.com"],
+  allowedDevOrigins: ["https://academy.pro-everest.com", "http://academy.pro-everest.com"],
   outputFileTracingRoot: path.join(__dirname, "../../"),
 
   // Important pour monorepo
@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "everest.madahoff.com",
+        hostname: "academy.pro-everest.com",
       },
     ],
   },
