@@ -42,11 +42,9 @@ export const Footer = () => {
     ];
 
     const socialLinks = [
-        { name: "Facebook", icon: Facebook, href: "#" },
-        { name: "Twitter", icon: Twitter, href: "#" },
-        { name: "Instagram", icon: Instagram, href: "#" },
-        { name: "LinkedIn", icon: Linkedin, href: "#" },
-        { name: "YouTube", icon: Youtube, href: "#" },
+        { name: "Facebook", icon: Facebook, href: "https://www.facebook.com/profile.php?id=61567038273876" },
+        // { name: "Instagram", icon: Instagram, href: "#" },
+        { name: "YouTube", icon: Youtube, href: "https://www.youtube.com/@NyAvo-publicspeaking1" },
     ];
 
     const stats = [
@@ -87,22 +85,7 @@ export const Footer = () => {
                             de passionnés et développez vos compétences avec nos formations de qualité.
                         </p>
 
-                        {/* Newsletter */}
-                        <div className="space-y-3">
-                            <h4 className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-300">
-                                Newsletter
-                            </h4>
-                            <div className="flex">
-                                <input
-                                    type="email"
-                                    placeholder="Votre email"
-                                    className="flex-1 bg-gray-900/50 border border-gray-800 px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#2563EB] transition-colors"
-                                />
-                                <button className="bg-[#2563EB] hover:bg-[#001F3F] px-5 py-3 transition-colors duration-300">
-                                    <ArrowRight className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
+                        
                     </div>
 
                     {/* Quick Links */}
@@ -125,7 +108,7 @@ export const Footer = () => {
                         </ul>
                     </div>
 
-                    {/* Resources */}
+                    {/* Resources
                     <div className="lg:col-span-2">
                         <h4 className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-300 mb-6">
                             Ressources
@@ -143,7 +126,7 @@ export const Footer = () => {
                                 </li>
                             ))}
                         </ul>
-                    </div>
+                    </div> */}
 
                     {/* Contact Info */}
                     <div className="lg:col-span-4">
