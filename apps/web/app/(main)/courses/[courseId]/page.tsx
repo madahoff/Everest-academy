@@ -30,6 +30,13 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
                     // @ts-ignore
                     ratings: { select: { rating: true } }
                 }
+            },
+            accessCodes: {
+                where: { used: true },
+                select: { id: true }
+            },
+            purchases: {
+                select: { id: true }
             }
         }
     });
@@ -51,6 +58,8 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
     });
 
     const averageRating = totalRatings > 0 ? (sumRatings / totalRatings).toFixed(1) : "N/A";
+
+    const enrollmentCount = ((course as any).accessCodes?.length || 0) + ((course as any).purchases?.length || 0);
 
     const serializedCourse = {
         ...course,
@@ -130,7 +139,7 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
                         <div className="w-px h-8 bg-white/20"></div>
                         <div className="flex items-center gap-3 text-white/80">
                             <Users className="w-5 h-5" />
-                            <span className="text-lg font-bold">{course.salesCount} Inscrits</span>
+                            <span className="text-lg font-bold">{enrollmentCount} Inscrits</span>
                         </div>
                         <div className="w-px h-8 bg-white/20"></div>
                         <div className="flex items-center gap-3 text-white/80">

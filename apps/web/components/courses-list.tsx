@@ -91,7 +91,7 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                 result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 break;
             case "popular":
-                result.sort((a, b) => (b.sales || 0) - (a.sales || 0)); // Assume sales property exists
+                result.sort((a, b) => (b.enrollmentCount || 0) - (a.enrollmentCount || 0));
                 break;
             case "price_asc":
                 result.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
@@ -246,8 +246,8 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
             <div className="max-w-[1600px] mx-auto px-6 lg:px-12 py-12">
                 {filteredCourses.length > 0 ? (
                     <div className={`grid gap-8 ${viewMode === "grid"
-                            ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                            : "grid-cols-1"
+                        ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                        : "grid-cols-1"
                         }`}>
                         {filteredCourses.map((course) => (
                             <div key={course.id} className={viewMode === "list" ? "flex gap-6 border border-gray-100 p-4 bg-white items-center" : ""}>

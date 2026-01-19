@@ -54,7 +54,7 @@ export const StyledCourseCard = ({ course }: any) => {
                         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cours Magistral</span>
                         <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 fill-[#001F3F] text-[#001F3F]" />
-                            <span className="text-xs font-bold text-[#001F3F]">4.8</span>
+                            <span className="text-xs font-bold text-[#001F3F]">{course.averageRating ?? "N/A"}</span>
                         </div>
                     </div>
                     <h3 className="text-xl font-bold text-[#050505] mb-3 leading-snug group-hover:text-[#2563EB] transition-colors">
