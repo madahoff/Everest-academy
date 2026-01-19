@@ -41,6 +41,59 @@ export const authOptions: AuthOptions = {
                     role: user.role
                 }
             }
+        }),
+        CredentialsProvider({
+            id: "otp",
+            name: "OTP",
+            credentials: {
+                email: { label: "Email", type: "email" },
+                code: { label: "Code", type: "text" }
+            },
+            async authorize(credentials) {
+                if (!credentials?.email || !credentials?.code) return null
+
+                const { email, code } = credentials
+
+                // 1. Verify OTP
+                const otpRecord = await (prisma as any).otp.findFirst({
+                    where: {
+                        email,
+                        code,
+                        expiresAt: { gt: new Date() }
+                    }
+                })
+
+                if (!otpRecord) {
+                    throw new Error("Code invalide ou expiré")
+                }
+
+                // 2. Consume OTP
+                await (prisma as any).otp.delete({ where: { id: otpRecord.id } })
+
+                // 3. Find or Create User
+                let user = await prisma.user.findUnique({
+                    where: { email }
+                })
+
+                if (!user) {
+                    user = await prisma.user.create({
+                        data: {
+                            email,
+                            name: email.split("@")[0],
+                            role: "STUDENT",
+                            plan: "FREE",
+                        }
+                    })
+                }
+
+                return {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    image: user.image,
+                    role: user.role
+                }
+            }
         })
     ],
     callbacks: {

@@ -33,83 +33,112 @@ export function AuthDialog({
     defaultTab?: "login" | "signup"
 }) {
     const [mode, setMode] = React.useState<"login" | "signup">(defaultTab)
+    const [step, setStep] = React.useState<"form" | "otp">("form")
     const router = useRouter()
 
-    // Login Form State
-    const { register: registerLogin, handleSubmit: handleSubmitLogin, reset: resetLogin, formState: { errors: errorsLogin } } = useForm()
-    const [loginLoading, setLoginLoading] = React.useState(false)
-    const [loginError, setLoginError] = React.useState("")
-
-    // Signup Form State
-    const { register: registerSignup, handleSubmit: handleSubmitSignup, reset: resetSignup, formState: { errors: errorsSignup } } = useForm()
-    const [signupLoading, setSignupLoading] = React.useState(false)
-    const [signupError, setSignupError] = React.useState("")
-
-    // Google OAuth State
+    // Form States
+    const { register, handleSubmit, reset, formState: { errors } } = useForm()
+    const { register: registerOtp, handleSubmit: handleSubmitOtp } = useForm()
+    const [loading, setLoading] = React.useState(false)
+    const [error, setError] = React.useState("")
     const [googleLoading, setGoogleLoading] = React.useState(false)
+    const [formData, setFormData] = React.useState<{ name?: string; email: string; password: string } | null>(null)
 
-    // Reset forms when switching modes or closing
+    // Reset when switching or closing
     React.useEffect(() => {
         if (!open) {
             setMode(defaultTab)
-            resetLogin()
-            resetSignup()
-            setLoginError("")
-            setSignupError("")
+            setStep("form")
+            reset()
+            setError("")
+            setFormData(null)
         }
-    }, [open, defaultTab, resetLogin, resetSignup])
+    }, [open, defaultTab, reset])
 
-    const onLogin = async (data: any) => {
-        setLoginLoading(true)
-        setLoginError("")
+    // Step 1: Submit form and request OTP
+    const onFormSubmit = async (data: any) => {
+        setLoading(true)
+        setError("")
         try {
-            const result = await signIn("credentials", {
-                redirect: false,
-                email: data.email,
-                password: data.password,
+            // Request OTP for email verification
+            const otpRes = await fetch("/api/auth/request-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: data.email }),
             })
-            if (result?.error) {
-                setLoginError("Identifiants incorrects")
-            } else {
-                onOpenChange(false)
-                router.refresh()
-            }
-        } catch (e) {
-            setLoginError("Erreur de connexion")
+            if (!otpRes.ok) throw new Error("Erreur lors de l'envoi du code")
+
+            // Store form data and go to OTP step
+            setFormData(data)
+            setStep("otp")
+        } catch (e: any) {
+            setError(e.message)
         } finally {
-            setLoginLoading(false)
+            setLoading(false)
         }
     }
 
-    const onSignup = async (data: any) => {
-        setSignupLoading(true)
-        setSignupError("")
+    // Step 2: Verify OTP and complete auth
+    const onVerifyOtp = async (data: any) => {
+        if (!formData) return
+        setLoading(true)
+        setError("")
         try {
-            const res = await fetch("/api/auth/signup", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            })
-            const json = await res.json()
-            if (!res.ok) throw new Error(json.error || "Erreur inscription")
+            if (mode === "signup") {
+                // Signup flow: verify OTP, then create account
+                const verifyRes = await fetch("/api/auth/verify-otp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: formData.email, code: data.code }),
+                })
+                if (!verifyRes.ok) {
+                    const json = await verifyRes.json()
+                    throw new Error(json.error || "Code invalide ou expiré")
+                }
 
-            // Auto-login
-            const result = await signIn("credentials", {
-                redirect: false,
-                email: data.email,
-                password: data.password,
-            })
-            if (result?.error) {
-                setSignupError("Compte créé, veuillez vous connecter.")
-                setMode("login")
+                // OTP verified, create account
+                const signupRes = await fetch("/api/auth/signup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(formData),
+                })
+                const signupJson = await signupRes.json()
+                if (!signupRes.ok) throw new Error(signupJson.error || "Erreur inscription")
+
+                // Auto login
+                await signIn("credentials", {
+                    redirect: false,
+                    email: formData.email,
+                    password: formData.password,
+                })
             } else {
-                onOpenChange(false)
-                router.refresh()
+                // Login flow: verify OTP first
+                const verifyRes = await fetch("/api/auth/verify-otp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: formData.email, code: data.code }),
+                })
+                if (!verifyRes.ok) {
+                    const json = await verifyRes.json()
+                    throw new Error(json.error || "Code invalide ou expiré")
+                }
+
+                // OTP verified, now login with credentials
+                const result = await signIn("credentials", {
+                    redirect: false,
+                    email: formData.email,
+                    password: formData.password,
+                })
+                if (result?.error) throw new Error("Identifiants incorrects")
             }
+
+            setFormData(null)
+            onOpenChange(false)
+            router.refresh()
         } catch (e: any) {
-            setSignupError(e.message || "Erreur lors de l'inscription")
+            setError(e.message || "Erreur de vérification")
         } finally {
-            setSignupLoading(false)
+            setLoading(false)
         }
     }
 
@@ -118,7 +147,7 @@ export function AuthDialog({
         try {
             await signIn("google", { callbackUrl: "/" })
         } catch (e) {
-            setLoginError("Erreur lors de la connexion avec Google")
+            setError("Erreur connexion Google")
             setGoogleLoading(false)
         }
     }
@@ -139,90 +168,77 @@ export function AuthDialog({
 
                     <div className="text-center mb-6">
                         <Dialog.Title className="text-2xl font-black uppercase tracking-tighter text-[#050505] mb-2">
-                            {mode === "login" ? "Connexion" : "Rejoindre"}
+                            {step === "otp" ? "Vérification" : mode === "login" ? "Connexion" : "Rejoindre"}
                         </Dialog.Title>
                         <Dialog.Description className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                            {mode === "login" ? "Accédez à votre espace" : "Commencez votre ascension"}
+                            {step === "otp" ? "Confirmez votre email" : mode === "login" ? "Accédez à votre espace" : "Commencez votre ascension"}
                         </Dialog.Description>
                     </div>
 
-                    {/* Google OAuth Button */}
-                    <div className="mb-6">
-                        <button
-                            type="button"
-                            onClick={handleGoogleSignIn}
-                            disabled={googleLoading}
-                            className={socialBtnStyle}
-                        >
-                            {googleLoading ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <>
-                                    <GoogleIcon />
-                                    <span>Continuer avec Google</span>
-                                </>
-                            )}
-                        </button>
-                    </div>
+                    <div className="space-y-4">
+                        {error && <div className="p-3 bg-red-50 text-red-500 text-[10px] font-bold uppercase text-center">{error}</div>}
 
-                    {/* Separator */}
-                    <div className="relative mb-6">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-gray-200"></div>
-                        </div>
-                        <div className="relative flex justify-center text-[10px] uppercase">
-                            <span className="bg-white px-4 text-gray-400 font-bold tracking-widest">ou</span>
-                        </div>
-                    </div>
+                        {step === "form" ? (
+                            <>
+                                {/* Google OAuth Button */}
+                                <div className="mb-6">
+                                    <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || loading} className={socialBtnStyle}>
+                                        {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><GoogleIcon /><span>Continuer avec Google</span></>}
+                                    </button>
+                                </div>
 
-                    {mode === "login" ? (
-                        <form onSubmit={handleSubmitLogin(onLogin)} className="space-y-4">
-                            {loginError && <div className="p-3 bg-red-50 text-red-500 text-[10px] font-bold uppercase text-center">{loginError}</div>}
-                            <div>
-                                <label className={labelStyle}>Email</label>
-                                <input {...registerLogin("email", { required: true })} type="email" className={inputStyle} placeholder="votre@email.com" />
-                            </div>
-                            <div>
-                                <label className={labelStyle}>Mot de passe</label>
-                                <input {...registerLogin("password", { required: true })} type="password" className={inputStyle} placeholder="••••••••" />
-                            </div>
-                            <button type="submit" disabled={loginLoading} className={btnStyle}>
-                                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Se Connecter"}
-                            </button>
-                            <div className="text-center mt-4">
-                                <button type="button" onClick={() => setMode("signup")} className="text-[10px] text-gray-400 hover:text-[#2563EB] uppercase tracking-widest font-bold">
-                                    Créer un compte
+                                {/* Separator */}
+                                <div className="relative mb-6">
+                                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+                                    <div className="relative flex justify-center text-[10px] uppercase"><span className="bg-white px-4 text-gray-400 font-bold tracking-widest">ou</span></div>
+                                </div>
+
+                                <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
+                                    {mode === "signup" && (
+                                        <div>
+                                            <label className={labelStyle}>Nom complet</label>
+                                            <input {...register("name", { required: mode === "signup" })} className={inputStyle} placeholder="John Doe" />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className={labelStyle}>Email</label>
+                                        <input {...register("email", { required: true })} type="email" className={inputStyle} placeholder="votre@email.com" />
+                                    </div>
+                                    <div>
+                                        <label className={labelStyle}>Mot de passe</label>
+                                        <input {...register("password", { required: true })} type="password" className={inputStyle} placeholder="••••••••" />
+                                    </div>
+                                    <button type="submit" disabled={loading} className={btnStyle}>
+                                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continuer"}
+                                    </button>
+                                    <div className="text-center mt-4">
+                                        <button type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")} className="text-[10px] text-gray-400 hover:text-black uppercase tracking-widest font-bold">
+                                            {mode === "login" ? "Créer un compte" : "J'ai déjà un compte"}
+                                        </button>
+                                    </div>
+                                </form>
+                            </>
+                        ) : (
+                            <form onSubmit={handleSubmitOtp(onVerifyOtp)} className="space-y-4">
+                                <div className="text-center mb-4 p-4 bg-gray-50 border border-gray-100">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Code envoyé à</p>
+                                    <p className="text-sm font-medium text-black mt-1">{formData?.email}</p>
+                                </div>
+                                <div>
+                                    <label className={labelStyle}>Code à 6 chiffres</label>
+                                    <input {...registerOtp("code", { required: true })} className={`${inputStyle} text-center tracking-[0.5em] text-lg`} placeholder="123456" maxLength={6} />
+                                </div>
+                                <button type="submit" disabled={loading} className={btnStyle}>
+                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "login" ? "Se Connecter" : "Créer mon Compte"}
                                 </button>
-                            </div>
-                        </form>
-                    ) : (
-                        <form onSubmit={handleSubmitSignup(onSignup)} className="space-y-4">
-                            {signupError && <div className="p-3 bg-red-50 text-red-500 text-[10px] font-bold uppercase text-center">{signupError}</div>}
-                            <div>
-                                <label className={labelStyle}>Nom complet</label>
-                                <input {...registerSignup("name", { required: true })} className={inputStyle} placeholder="John Doe" />
-                            </div>
-                            <div>
-                                <label className={labelStyle}>Email</label>
-                                <input {...registerSignup("email", { required: true })} type="email" className={inputStyle} placeholder="votre@email.com" />
-                            </div>
-                            <div>
-                                <label className={labelStyle}>Mot de passe</label>
-                                <input {...registerSignup("password", { required: true })} type="password" className={inputStyle} placeholder="••••••••" />
-                            </div>
-                            <button type="submit" disabled={signupLoading} className={btnStyle}>
-                                {signupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Créer mon Compte"}
-                            </button>
-                            <div className="text-center mt-4">
-                                <button type="button" onClick={() => setMode("login")} className="text-[10px] text-gray-400 hover:text-[#2563EB] uppercase tracking-widest font-bold">
-                                    J'ai déjà un compte
+                                <button type="button" onClick={() => { setStep("form"); setError(""); }} className="w-full text-[10px] text-gray-400 font-bold uppercase tracking-widest hover:text-black transition-colors">
+                                    Modifier les informations
                                 </button>
-                            </div>
-                        </form>
-                    )}
+                            </form>
+                        )}
+                    </div>
                 </Dialog.Content>
             </Dialog.Portal>
         </Dialog.Root>
     )
 }
-

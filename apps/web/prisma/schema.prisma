@@ -262,3 +262,14 @@ model AccessCode {
 
   @@map("access_codes")
 }
+
+model Otp {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([email, code])
+  @@map("otps")
+}
