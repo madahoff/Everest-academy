@@ -180,7 +180,7 @@ export const Footer = () => {
                         </div>
 
                         {/* Legal Links */}
-                        <div className="flex flex-wrap items-center justify-center gap-6">
+                        {/* <div className="flex flex-wrap items-center justify-center gap-6">
                             {legal.map((link, index) => (
                                 <Link
                                     key={link.name}
@@ -190,7 +190,7 @@ export const Footer = () => {
                                     {link.name}
                                 </Link>
                             ))}
-                        </div>
+                        </div> */}
 
                         {/* Social Links */}
                         <div className="flex items-center gap-3">
