@@ -209,7 +209,7 @@ export function AuthDialog({
                                         <input {...register("password", { required: true })} type="password" className={inputStyle} placeholder="••••••••" />
                                     </div>
                                     <button type="submit" disabled={loading} className={btnStyle}>
-                                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continuer"}
+                                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Se connecter"}
                                     </button>
                                     <div className="text-center mt-4">
                                         <button type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")} className="text-[10px] text-gray-400 hover:text-black uppercase tracking-widest font-bold">
