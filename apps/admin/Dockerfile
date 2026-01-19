@@ -71,9 +71,10 @@ RUN mkdir -p /app/apps/admin/public/uploads/videos \
 # Install prisma CLI for migrations (minimal install)
 RUN npm install -g prisma@5.22.0
 
-USER nextjs
+# USER nextjs
 
 EXPOSE 3001
 
 # Use prisma db push for production (works with existing databases)
-CMD ["sh", "-c", "prisma db push --schema=apps/admin/prisma/schema.prisma --accept-data-loss --skip-generate && node apps/admin/server.js"]
+# Run as root to fix permissions, then switch to nextjs user
+CMD ["sh", "-c", "mkdir -p /app/apps/admin/public/uploads && chown -R nextjs:nodejs /app/apps/admin/public/uploads && runuser -u nextjs -- sh -c 'prisma db push --schema=apps/admin/prisma/schema.prisma --accept-data-loss --skip-generate && node apps/admin/server.js'"]
