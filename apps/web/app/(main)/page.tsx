@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useAuthModal } from "@/component/auth-modal-provider";
+import { CountdownBanner } from "@/components/countdown-banner";
 
 // --- UI COMPONENTS (Style conservé) ---
 
@@ -54,7 +55,10 @@ export default function OratoryComingSoon() {
     };
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white overflow-x-hidden">
+        <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white overflow-x-hidden pt-[100px]">
+
+            {/* --- COMPTE À REBOURS LIVE --- */}
+            <CountdownBanner />
 
             {/* --- SECTION 1: HERO IMMERSIF --- */}
             <section className="relative min-h-screen flex flex-col justify-center bg-[#050505] text-white border-b border-gray-800">
@@ -86,7 +90,7 @@ export default function OratoryComingSoon() {
                                 La parole est une architecture. Nous vous apprenons à la bâtir.
                                 Une formation d'élite pour ceux qui doivent convaincre, diriger et inspirer.
                                 <br /><br />
-                               
+
                             </p>
 
                             {/* Formulaire Hero */}
@@ -254,8 +258,8 @@ export default function OratoryComingSoon() {
                         {!session ? (
                             <>
                                 <div className="w-full group">
-                                    <form 
-                                        onSubmit={handleJoin} 
+                                    <form
+                                        onSubmit={handleJoin}
                                         className="flex flex-col sm:flex-row gap-0 w-full bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 p-1.5 transition-all duration-300 focus-within:shadow-[0_20px_50px_rgba(37,99,235,0.15)] focus-within:border-blue-100"
                                     >
                                         <input
@@ -269,7 +273,7 @@ export default function OratoryComingSoon() {
                                         </button>
                                     </form>
                                 </div>
-                                
+
                                 <div className="flex items-center gap-4 opacity-40">
                                     <div className="h-[1px] w-8 bg-gray-400"></div>
                                     <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] font-medium">
@@ -282,8 +286,8 @@ export default function OratoryComingSoon() {
                             <div className="relative group overflow-hidden p-10 border border-gray-100 bg-white shadow-2xl text-center max-w-md">
                                 {/* Accent décoratif */}
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 h-1 w-20 bg-blue-600"></div>
-                                
-                             
+
+
                                 <p className="text-[#050505] text-xl font-serif italic mb-2">
                                     Bienvenue
                                 </p>
