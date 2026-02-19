@@ -8,15 +8,20 @@ const nextConfig: NextConfig = {
 
   // Important pour monorepo
   experimental: {
+    serverActions: {
+      allowedOrigins: ["academy.pro-everest.com", "localhost:3000"],
+    },
   },
 
   // Optimisations
   compress: true,
   poweredByHeader: false,
 
-  // Performance
+  // Performance - Garder console.error et console.warn visibles en production
   compiler: {
-    removeConsole: process.env.NODE_ENV === "production",
+    removeConsole: process.env.NODE_ENV === "production"
+      ? { exclude: ["error", "warn"] }
+      : false,
   },
 
   images: {
