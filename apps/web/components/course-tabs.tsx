@@ -77,6 +77,7 @@ export default function CourseTabs({ course, isPurchased }: { course: any, isPur
                                 controls
                                 muted={isMuted}
                                 playsInline
+                                preload="auto"
                                 className="w-full h-full object-contain bg-black"
                             />
                         ) : (

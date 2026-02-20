@@ -105,12 +105,22 @@ export default async function SectionPage({ params }: { params: Promise<{ course
                         {/* Lecteur Vidéo */}
                         <div className="relative bg-[#050505] aspect-video mb-12 group overflow-hidden border-0 shadow-2xl rounded-none">
                             {section.video ? (
-                                <iframe
-                                    src={formatVideoUrl(section.video)}
-                                    title={section.title}
-                                    className="w-full h-full grayscale-[0.2] hover:grayscale-0 transition-all duration-700"
-                                    allowFullScreen
-                                />
+                                section.video.match(/\.(mp4|webm|mov)$/i) || section.video.includes('/uploads/') ? (
+                                    <video
+                                        src={section.video}
+                                        controls
+                                        playsInline
+                                        preload="auto"
+                                        className="w-full h-full object-contain bg-black"
+                                    />
+                                ) : (
+                                    <iframe
+                                        src={formatVideoUrl(section.video)}
+                                        title={section.title}
+                                        className="w-full h-full grayscale-[0.2] hover:grayscale-0 transition-all duration-700"
+                                        allowFullScreen
+                                    />
+                                )
                             ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-gray-900">
                                     <Video className="w-12 h-12 mb-4 opacity-50" />
