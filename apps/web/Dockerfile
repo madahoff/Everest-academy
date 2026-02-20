@@ -1,12 +1,12 @@
-FROM node:lts-alpine AS pruner
-WORKDIR /app
+FROM node:20-slim AS pruner
 RUN npm install -g turbo
+WORKDIR /app
 COPY . .
 RUN turbo prune web --docker
 
-FROM node:lts-alpine AS installer
+FROM node:20-slim AS installer
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 WORKDIR /app
-RUN apk add --no-cache openssl openssl-dev libc6-compat
 COPY --from=pruner /app/out/json .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=pruner /app/turbo.json ./turbo.json
@@ -15,9 +15,9 @@ RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-FROM node:lts-alpine AS builder
+FROM node:20-slim AS builder
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 WORKDIR /app
-RUN apk add --no-cache openssl openssl-dev libc6-compat
 COPY --from=installer /app/ .
 COPY --from=pruner /app/out/full .
 RUN npm install -g pnpm
@@ -29,19 +29,17 @@ RUN npx prisma@5.22.0 generate --schema=apps/web/prisma/schema.prisma
 ENV NODE_ENV=production
 RUN pnpm turbo run build --filter=web
 
-FROM node:lts-alpine AS runner
+FROM node:20-slim AS runner
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Install system dependencies (OpenSSL for Prisma, curl for health checks)
-RUN apk add --no-cache curl openssl openssl-dev libc6-compat
-
 # Create non-root user for security BEFORE copying files
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
 # Copy built application (standalone already includes necessary node_modules)
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
@@ -54,7 +52,7 @@ COPY --from=builder /app/apps/web/prisma ./apps/web/prisma
 # Install prisma CLI for migrations (minimal install)
 RUN npm install -g prisma@5.22.0
 
-# Switch to nodejs user
+# Switch to nextjs user
 USER nextjs
 
 EXPOSE 3000
