@@ -6,16 +6,18 @@ RUN turbo prune web --docker
 
 FROM node:lts-alpine AS installer
 WORKDIR /app
+RUN apk add --no-cache openssl
 COPY --from=pruner /app/out/json .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=pruner /app/turbo.json ./turbo.json
 RUN npm install -g pnpm
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM node:lts-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache openssl
 COPY --from=installer /app/ .
 COPY --from=pruner /app/out/full .
 RUN npm install -g pnpm
