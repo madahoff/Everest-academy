@@ -6,7 +6,7 @@ RUN turbo prune web --docker
 
 FROM node:lts-alpine AS installer
 WORKDIR /app
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl openssl-dev libc6-compat
 COPY --from=pruner /app/out/json .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=pruner /app/turbo.json ./turbo.json
@@ -17,7 +17,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM node:lts-alpine AS builder
 WORKDIR /app
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl openssl-dev libc6-compat
 COPY --from=installer /app/ .
 COPY --from=pruner /app/out/full .
 RUN npm install -g pnpm
@@ -36,9 +36,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Install curl for health checks
-RUN apk add --no-cache curl
-RUN npm install -g pnpm
+# Install system dependencies (OpenSSL for Prisma, curl for health checks)
+RUN apk add --no-cache curl openssl openssl-dev libc6-compat
 
 # Create non-root user for security BEFORE copying files
 RUN addgroup -g 1001 -S nodejs && \
