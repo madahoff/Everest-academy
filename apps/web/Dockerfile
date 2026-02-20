@@ -1,54 +1,46 @@
-FROM node:20-slim AS base
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-
-FROM base AS pruner
-RUN pnpm add -g turbo
+FROM node:lts-alpine AS pruner
 WORKDIR /app
+RUN npm install -g turbo
 COPY . .
 RUN turbo prune web --docker
 
-FROM base AS builder
-# Install dependencies
-RUN apt-get update -y && apt-get install -y openssl ca-certificates
+FROM node:lts-alpine AS installer
 WORKDIR /app
-
-# Install dependencies
-COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/json .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY --from=pruner /app/turbo.json ./turbo.json
+RUN npm install -g pnpm
+RUN pnpm install --no-frozen-lockfile
 
-# Copy source
-COPY --from=pruner /app/out/full/ .
-COPY turbo.json turbo.json
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Generate Prisma Client (will be in node_modules/.prisma/client)
+FROM node:lts-alpine AS builder
+WORKDIR /app
+COPY --from=installer /app/ .
+COPY --from=pruner /app/out/full .
+RUN npm install -g pnpm
+
+# Generate Prisma Client
 RUN npx prisma@5.22.0 generate --schema=apps/web/prisma/schema.prisma
 
-# Build with production environment
+# Build the Next.js application
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm turbo run build --filter=web
 
-# Verification skipped to avoid runc errors
-# The COPY command in runner stage will fail if build failed
-
-# The standalone output includes node_modules with Prisma client already bundled
-# We just need to ensure the schema is available for migrations
-
-FROM base AS runner
-# Install dependencies
-RUN apt-get update -y && apt-get install -y openssl ca-certificates
+FROM node:lts-alpine AS runner
 WORKDIR /app
-
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Install curl for health checks
+RUN apk add --no-cache curl
+RUN npm install -g pnpm
+
+# Create non-root user for security BEFORE copying files
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
 
 # Copy built application (standalone already includes necessary node_modules)
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
@@ -61,6 +53,7 @@ COPY --from=builder /app/apps/web/prisma ./apps/web/prisma
 # Install prisma CLI for migrations (minimal install)
 RUN npm install -g prisma@5.22.0
 
+# Switch to nodejs user
 USER nextjs
 
 EXPOSE 3000
