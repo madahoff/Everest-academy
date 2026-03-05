@@ -11,7 +11,8 @@ import {
     Users,
     Command,
     ChevronRight,
-    LogOut
+    LogOut,
+    FileSpreadsheet,
 } from "lucide-react"
 
 import {
@@ -32,6 +33,7 @@ const menuItems = [
     { title: "Catalogue Cours", url: "/courses", icon: BookOpen, code: "ED-02" },
     { title: "Inventaire Store", url: "/products", icon: Package, code: "SH-03" },
     { title: "Base Utilisateurs", url: "/users", icon: Users, code: "US-04" },
+    { title: "Import Données", url: "/import", icon: FileSpreadsheet, code: "IM-05" },
 ]
 
 export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
