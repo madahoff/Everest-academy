@@ -23,6 +23,17 @@ export async function POST(request: Request) {
         const body: SendEmailRequest = await request.json()
         const { recipients, subject, htmlBody } = body
 
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+            console.error("Missing SMTP configuration:", {
+                SMTP_HOST: process.env.SMTP_HOST,
+                SMTP_PORT: process.env.SMTP_PORT,
+                SMTP_USER: process.env.SMTP_USER ? "***" : undefined,
+            })
+            return NextResponse.json({
+                error: "Configuration SMTP manquante sur le serveur. Veuillez vérifier le fichier .env et redémarrer le serveur de développement."
+            }, { status: 500 })
+        }
+
         if (!recipients || recipients.length === 0) {
             return NextResponse.json({ error: "Aucun destinataire" }, { status: 400 })
         }

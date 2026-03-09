@@ -1,14 +1,19 @@
 import nodemailer from "nodemailer"
 
 function getTransporter() {
+    const host = process.env.SMTP_HOST || "smtp.hostinger.com"
+    const port = Number(process.env.SMTP_PORT) || 465
+    const secure = process.env.SMTP_SECURE !== "false" // true by default
+    const user = process.env.SMTP_USER || "contact@pro-everest.com"
+    const pass = process.env.SMTP_PASSWORD || ""
+
+    console.log("[mailer] SMTP config:", { host, port, secure, user, passSet: !!pass })
+
     return nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === "true",
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASSWORD,
-        },
+        host,
+        port,
+        secure,
+        auth: { user, pass },
     })
 }
 
