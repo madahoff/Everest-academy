@@ -23,14 +23,26 @@ export async function POST(request: Request) {
         const body: SendEmailRequest = await request.json()
         const { recipients, subject, htmlBody } = body
 
+        console.log("[send-email] Checking SMTP config...")
+        const smtpConfig = {
+            host: process.env.SMTP_HOST,
+            port: process.env.SMTP_PORT,
+            user: process.env.SMTP_USER,
+            passSet: !!process.env.SMTP_PASSWORD,
+            secure: process.env.SMTP_SECURE,
+        }
+        console.log("[send-email] SMTP config found:", { ...smtpConfig, user: smtpConfig.user ? "***" : undefined })
+
         if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-            console.error("Missing SMTP configuration:", {
-                SMTP_HOST: process.env.SMTP_HOST,
-                SMTP_PORT: process.env.SMTP_PORT,
-                SMTP_USER: process.env.SMTP_USER ? "***" : undefined,
-            })
+            console.error("[send-email] Missing SMTP variables:", smtpConfig)
             return NextResponse.json({
-                error: "Configuration SMTP manquante sur le serveur. Veuillez vérifier le fichier .env et redémarrer le serveur de développement."
+                error: "Configuration SMTP manquante sur le serveur.",
+                details: "Assurez-vous que SMTP_HOST, SMTP_USER et SMTP_PASSWORD sont définis dans Dokploy.",
+                debug_config: {
+                    host: !!process.env.SMTP_HOST,
+                    user: !!process.env.SMTP_USER,
+                    pass: !!process.env.SMTP_PASSWORD
+                }
             }, { status: 500 })
         }
 
