@@ -66,9 +66,10 @@ export async function POST(request: Request) {
 
                 results.sent++
 
-                // Delay between emails to respect SMTP limits
-                if (recipients.length > 1) {
-                    await new Promise((resolve) => setTimeout(resolve, 200))
+                // Délai aléatoire "humain" entre les emails si envoi multiple direct via API
+                if (recipients.length > 1 && recipients.indexOf(recipient) < recipients.length - 1) {
+                    const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000
+                    await new Promise((resolve) => setTimeout(resolve, delay))
                 }
             } catch (err: any) {
                 results.failed.push({

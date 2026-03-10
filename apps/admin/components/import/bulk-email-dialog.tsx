@@ -34,6 +34,7 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
     const [sending, setSending] = useState(false)
     const [sendResult, setSendResult] = useState<{ sent: number; failed: { email: string; error: string }[] } | null>(null)
     const [manualEmail, setManualEmail] = useState("")
+    const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
 
     // Find email column
     const emailColumn = useMemo(() => {
@@ -149,39 +150,75 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
 
         setSending(true)
         setSendResult(null)
+        setProgress(null)
 
         try {
             // Build recipients with their row data for variable replacement
-            const recipients = Array.from(selectedEmails).map((email) => {
+            const recipientsArray = Array.from(selectedEmails).map((email) => {
                 const row = rows.find((r) => r[emailColumn] === email)
                 return { email, variables: row || {} }
             })
 
-            const res = await fetch("/api/import/send-email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ recipients, subject, htmlBody }),
-            })
+            setProgress({ current: 0, total: recipientsArray.length })
+            let sentCount = 0
+            const failedList: { email: string; error: string }[] = []
 
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error)
+            for (let i = 0; i < recipientsArray.length; i++) {
+                setProgress({ current: i + 1, total: recipientsArray.length })
 
-            setSendResult(data)
-            if (data.sent > 0) {
-                toast.success(`${data.sent} email(s) envoyé(s) avec succès`)
+                try {
+                    const res = await fetch("/api/import/send-email", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ recipients: [recipientsArray[i]], subject, htmlBody }),
+                    })
+
+                    const data = await res.json()
+                    if (!res.ok) throw new Error(data.error)
+
+                    if (data.sent > 0) {
+                        sentCount++
+                    }
+                    if (data.failed?.length > 0) {
+                        failedList.push(...data.failed)
+                    }
+                } catch (err: any) {
+                    failedList.push({ email: recipientsArray[i].email, error: err.message || "Erreur d'envoi" })
+                }
+
+                // Human-like delay logic to prevent Hostinger limits (only wait if it's not the last email)
+                if (i < recipientsArray.length - 1) {
+                    // Random delay between 4s and 8s
+                    let delay = Math.floor(Math.random() * (8000 - 4000 + 1)) + 4000
+
+                    // Every 15 emails, take a "pause humaine" of 15 seconds
+                    if ((i + 1) % 15 === 0) {
+                        delay += 15000
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                }
             }
-            if (data.failed?.length > 0) {
-                toast.error(`${data.failed.length} email(s) échoué(s)`)
+
+            const finalResult = { sent: sentCount, failed: failedList }
+            setSendResult(finalResult)
+
+            if (sentCount > 0) {
+                toast.success(`${sentCount} email(s) envoyé(s) avec succès`)
+            }
+            if (failedList.length > 0) {
+                toast.error(`${failedList.length} email(s) échoué(s)`)
             }
         } catch (err: any) {
-            toast.error(err.message || "Erreur lors de l'envoi")
+            toast.error(err.message || "Erreur lors de l'envoi global")
         } finally {
             setSending(false)
+            setProgress(null)
         }
     }
 
     return (
-        <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+        <Dialog open={open} onOpenChange={(v) => { if (!v && !sending) onClose() }}>
             <DialogContent className="sm:max-w-[800px] max-h-[90vh] rounded-none border-0 shadow-xl overflow-hidden flex flex-col">
                 <DialogHeader className="border-b border-gray-100 pb-4 shrink-0">
                     <DialogTitle className="text-sm font-black uppercase tracking-[0.15em] text-[#050505]">
@@ -347,7 +384,8 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
                 <DialogFooter className="border-t border-gray-100 pt-4 gap-2 shrink-0">
                     <button
                         onClick={onClose}
-                        className="px-6 py-2.5 text-[9px] font-bold uppercase tracking-widest border border-gray-200 hover:border-[#050505] transition-all"
+                        disabled={sending}
+                        className="px-6 py-2.5 text-[9px] font-bold uppercase tracking-widest border border-gray-200 hover:border-[#050505] transition-all disabled:opacity-50"
                     >
                         Fermer
                     </button>
@@ -356,8 +394,19 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
                         disabled={sending || selectedEmails.size === 0}
                         className="px-6 py-2.5 text-[9px] font-bold uppercase tracking-widest bg-[#2563EB] text-white hover:bg-[#1d4ed8] transition-all flex items-center gap-2 disabled:opacity-50"
                     >
-                        {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                        Envoyer à {selectedEmails.size} personne{selectedEmails.size > 1 ? "s" : ""}
+                        {sending ? (
+                            <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                {progress
+                                    ? `Envoi en cours (${progress.current}/${progress.total})...`
+                                    : "Envoi en cours..."}
+                            </>
+                        ) : (
+                            <>
+                                <Send className="w-3 h-3" />
+                                Envoyer à {selectedEmails.size} personne{selectedEmails.size > 1 ? "s" : ""}
+                            </>
+                        )}
                     </button>
                 </DialogFooter>
             </DialogContent>
