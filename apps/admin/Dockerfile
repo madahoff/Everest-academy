@@ -65,4 +65,4 @@ EXPOSE 3001
 
 # Use prisma db push for production (works with existing databases)
 # Run as root to fix permissions, then switch to nextjs user
-CMD ["sh", "-c", "mkdir -p /app/apps/admin/public/uploads && chown -R nextjs:nodejs /app/apps/admin/public/uploads && runuser -u nextjs -- sh -c 'prisma db push --schema=apps/admin/prisma/schema.prisma --accept-data-loss --skip-generate && node apps/admin/server.js'"]
+CMD ["sh", "-c", "mkdir -p /app/apps/admin/public/uploads && chown -R nextjs:nodejs /app/apps/admin/public/uploads && runuser -u nextjs --preserve-environment -- sh -c 'prisma db push --schema=apps/admin/prisma/schema.prisma --accept-data-loss --skip-generate && node apps/admin/server.js'"]
