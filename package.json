@@ -11,5 +11,8 @@
   "devDependencies": {
     "baseline-browser-mapping": "latest",
     "turbo": "^2.7.4"
+  },
+  "dependencies": {
+    "prisma": "5.22.0"
   }
 }

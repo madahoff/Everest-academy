@@ -34,7 +34,7 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
     const [sending, setSending] = useState(false)
     const [sendResult, setSendResult] = useState<{ sent: number; failed: { email: string; error: string }[] } | null>(null)
     const [manualEmail, setManualEmail] = useState("")
-    const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
+    const [progress, setProgress] = useState<{ current: number; total: number; pausing?: boolean } | null>(null)
 
     // Find email column
     const emailColumn = useMemo(() => {
@@ -186,18 +186,6 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
                     failedList.push({ email: recipientsArray[i].email, error: err.message || "Erreur d'envoi" })
                 }
 
-                // Human-like delay logic to prevent Hostinger limits (only wait if it's not the last email)
-                if (i < recipientsArray.length - 1) {
-                    // Random delay between 4s and 8s
-                    let delay = Math.floor(Math.random() * (8000 - 4000 + 1)) + 4000
-
-                    // Every 15 emails, take a "pause humaine" of 15 seconds
-                    if ((i + 1) % 15 === 0) {
-                        delay += 15000
-                    }
-
-                    await new Promise(resolve => setTimeout(resolve, delay))
-                }
             }
 
             const finalResult = { sent: sentCount, failed: failedList }
@@ -398,7 +386,9 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
                             <>
                                 <Loader2 className="w-3 h-3 animate-spin" />
                                 {progress
-                                    ? `Envoi en cours (${progress.current}/${progress.total})...`
+                                    ? progress.pausing
+                                        ? `Pause entre lots (${progress.current}/${progress.total})...`
+                                        : `Envoi en cours (${progress.current}/${progress.total})...`
                                     : "Envoi en cours..."}
                             </>
                         ) : (

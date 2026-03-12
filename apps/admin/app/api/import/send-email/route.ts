@@ -70,20 +70,21 @@ export async function POST(request: Request) {
                 const personalizedSubject = replaceVariables(subject, recipient.variables)
                 const personalizedBody = replaceVariables(htmlBody, recipient.variables)
 
-                await sendEmail({
+                console.log(`[send-email] Attempting to send to ${recipient.email}`)
+                console.log(`[send-email] Subject:`, personalizedSubject)
+                // console.log(`[send-email] Body length:`, personalizedBody.length)
+
+                const info = await sendEmail({
                     to: recipient.email,
                     subject: personalizedSubject,
                     html: personalizedBody,
                 })
+                
+                console.log(`[send-email] Successfully sent to ${recipient.email}. MessageId: ${info?.messageId}`)
 
                 results.sent++
-
-                // Délai aléatoire "humain" entre les emails si envoi multiple direct via API
-                if (recipients.length > 1 && recipients.indexOf(recipient) < recipients.length - 1) {
-                    const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000
-                    await new Promise((resolve) => setTimeout(resolve, delay))
-                }
             } catch (err: any) {
+                console.error(`[send-email] Failed to send to ${recipient.email}:`, err)
                 results.failed.push({
                     email: recipient.email,
                     error: err.message || "Erreur d'envoi",

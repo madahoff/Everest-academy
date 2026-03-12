@@ -13,6 +13,7 @@ function getTransporter() {
         host,
         port,
         secure,
+        requireTLS: port === 587,
         auth: { user, pass },
     })
 }
@@ -82,11 +83,20 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
 </body>
 </html>`
 
-    return transporter.sendMail({
-        from: process.env.SMTP_FROM || "Everest Academy <contact@pro-everest.com>",
+    const fromEmail = process.env.SMTP_FROM || "contact@pro-everest.com"
+    const fromName = "Everest Academy"
+
+    return await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
         to,
+        replyTo: fromEmail,
         subject,
+        text: "Pour visualiser cet email, veuillez activer l'affichage HTML dans votre messagerie.",
         html: wrappedHtml,
+        headers: {
+            "X-Priority": "1 (Highest)",
+            "X-Mailer": "EverestMailer",
+        }
     })
 }
 

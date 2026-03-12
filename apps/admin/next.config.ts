@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   // which means they'd be empty in Docker builds.
 
   // Important pour monorepo : permet à Next.js de tracer les dépendances
+  serverExternalPackages: ["@prisma/client", "bcryptjs"],
   experimental: {
   },
 
