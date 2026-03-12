@@ -12,12 +12,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2, Send } from "lucide-react"
-import { useEditor, EditorContent } from "@tiptap/react"
-import StarterKit from "@tiptap/starter-kit"
-import Underline from "@tiptap/extension-underline"
-import Link from "@tiptap/extension-link"
-import Color from "@tiptap/extension-color"
-import { TextStyle } from "@tiptap/extension-text-style"
+import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { toast } from "sonner"
 
 interface SendEmailDialogProps {
@@ -29,24 +24,8 @@ interface SendEmailDialogProps {
 
 export function SendEmailDialog({ open, onClose, recipientEmail, rowData }: SendEmailDialogProps) {
     const [subject, setSubject] = useState("")
+    const [htmlBody, setHtmlBody] = useState("<p>Bonjour,</p><p></p><p>Cordialement,<br/>Everest Academy</p>")
     const [sending, setSending] = useState(false)
-
-    const editor = useEditor({
-        extensions: [
-            StarterKit,
-            Underline,
-            Link.configure({ openOnClick: false }),
-            TextStyle,
-            Color,
-        ],
-        content: "<p>Bonjour,</p><p></p><p>Cordialement,<br/>Everest Academy</p>",
-        immediatelyRender: false,
-        editorProps: {
-            attributes: {
-                class: "prose prose-sm max-w-none focus:outline-none min-h-[150px] p-4",
-            },
-        },
-    })
 
     const handleSend = async () => {
         if (!subject.trim()) {
@@ -54,7 +33,6 @@ export function SendEmailDialog({ open, onClose, recipientEmail, rowData }: Send
             return
         }
 
-        const htmlBody = editor?.getHTML() || ""
         if (!htmlBody || htmlBody === "<p></p>") {
             toast.error("Le corps du mail est requis")
             return
@@ -90,8 +68,8 @@ export function SendEmailDialog({ open, onClose, recipientEmail, rowData }: Send
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-            <DialogContent className="sm:max-w-[650px] rounded-none border-0 shadow-xl">
-                <DialogHeader className="border-b border-gray-100 pb-4">
+            <DialogContent className="sm:max-w-[750px] max-h-[90vh] rounded-none border-0 shadow-xl overflow-hidden flex flex-col">
+                <DialogHeader className="border-b border-gray-100 pb-4 shrink-0">
                     <DialogTitle className="text-sm font-black uppercase tracking-[0.15em] text-[#050505]">
                         Envoyer un Email
                     </DialogTitle>
@@ -100,7 +78,7 @@ export function SendEmailDialog({ open, onClose, recipientEmail, rowData }: Send
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="py-4 space-y-4">
+                <div className="flex-1 overflow-y-auto py-4 space-y-4">
                     <div className="space-y-1.5">
                         <Label className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">
                             Destinataire
@@ -124,25 +102,21 @@ export function SendEmailDialog({ open, onClose, recipientEmail, rowData }: Send
                         />
                     </div>
 
-                    <div className="space-y-1.5">
-                        <Label className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">
-                            Corps du message
+                    <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                            Corps du message <span className="text-red-500">*</span>
                         </Label>
-                        {/* Toolbar */}
-                        {editor && (
-                            <div className="flex gap-1 p-2 bg-gray-50 border border-gray-200 border-b-0">
-                                <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 text-xs font-bold hover:bg-white transition ${editor.isActive("bold") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>B</button>
-                                <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 text-xs italic hover:bg-white transition ${editor.isActive("italic") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>I</button>
-                                <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 text-xs underline hover:bg-white transition ${editor.isActive("underline") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>U</button>
-                            </div>
-                        )}
-                        <div className="border border-gray-200 bg-white">
-                            <EditorContent editor={editor} />
+                        <div className="min-h-[200px]">
+                            <RichTextEditor
+                                value={htmlBody}
+                                onChange={setHtmlBody}
+                                placeholder="Rédigez votre email, ajoutez des titres, des images..."
+                            />
                         </div>
                     </div>
                 </div>
 
-                <DialogFooter className="border-t border-gray-100 pt-4 gap-2">
+                <DialogFooter className="border-t border-gray-100 pt-4 gap-2 shrink-0">
                     <button
                         onClick={onClose}
                         className="px-6 py-2.5 text-[9px] font-bold uppercase tracking-widest border border-gray-200 hover:border-[#050505] transition-all"

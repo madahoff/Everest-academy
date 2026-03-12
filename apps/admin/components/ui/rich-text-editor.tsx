@@ -1,24 +1,19 @@
 "use client"
 
+import { useRef } from "react"
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
+import Image from '@tiptap/extension-image'
 import {
     Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
     Link as LinkIcon, Undo, Redo, Quote, Heading1, Heading2, Heading3,
-    AlignLeft, AlignCenter, AlignRight
+    Image as ImageIcon,
 } from 'lucide-react'
 import { Toggle } from "@/components/ui/toggle"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-// Custom font size extension if needed, or stick to headings for now. 
-// Adding basic sizing support via TextStyle could be complex without installing more packages.
-// Let's rely on standard headings (H1, H2, H3) as "font sizes" since that's semantic.
-// But user explicitly asked for "changer la taille de la police".
-// I'll add heading controls.
 
 interface RichTextEditorProps {
     value: string
@@ -27,12 +22,21 @@ interface RichTextEditorProps {
 }
 
 export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorProps) {
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
     const editor = useEditor({
         immediatelyRender: false,
         extensions: [
             StarterKit,
             Underline,
             TextStyle,
+            Image.configure({
+                inline: true,
+                allowBase64: true,
+                HTMLAttributes: {
+                    style: 'max-width: 100%; height: auto; display: block; margin: 8px 0;',
+                },
+            }),
             Link.configure({
                 openOnClick: false,
                 HTMLAttributes: {
@@ -45,11 +49,47 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
             attributes: {
                 class: 'min-h-[300px] w-full rounded-none border border-gray-200 bg-white px-6 py-4 text-base ring-offset-white placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 rich-text max-w-none text-gray-600 font-light leading-relaxed',
             },
+            handlePaste: (view, event) => {
+                const items = Array.from(event.clipboardData?.items || [])
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        const file = item.getAsFile()
+                        if (file) {
+                            const reader = new FileReader()
+                            reader.onload = (ev) => {
+                                const src = ev.target?.result as string
+                                // Delaying slightly ensures TipTap's standard paste handler doesn't conflict
+                                setTimeout(() => {
+                                    editor?.chain().focus().setImage({ src, alt: file.name }).run()
+                                }, 10)
+                            }
+                            reader.readAsDataURL(file)
+                            event.preventDefault()
+                            return true
+                        }
+                    }
+                }
+                return false
+            },
         },
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML())
         },
     })
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !editor) return
+
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+            const src = ev.target?.result as string
+            editor.chain().focus().setImage({ src, alt: file.name }).run()
+        }
+        reader.readAsDataURL(file)
+        // Reset so the same file can be re-uploaded
+        e.target.value = ""
+    }
 
     if (!editor) {
         return null
@@ -152,6 +192,25 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
                 >
                     <Quote className="h-4 w-4" />
                 </Toggle>
+
+                <div className="w-px h-6 bg-gray-300 mx-2" />
+
+                {/* Image Upload */}
+                <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 hover:bg-white rounded-sm text-gray-500 hover:text-[#2563EB] transition"
+                    title="Insérer une image"
+                >
+                    <ImageIcon className="h-4 w-4" />
+                </button>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                />
 
                 <div className="w-px h-6 bg-gray-300 mx-2" />
 

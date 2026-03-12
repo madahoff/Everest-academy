@@ -24,12 +24,39 @@ interface SendEmailOptions {
     html: string
 }
 
+/**
+ * Convert TipTap rich HTML to email-safe inline-styled HTML.
+ * Email clients strip <style> tags and class names, so we apply inline styles.
+ */
+function inlineEmailStyles(html: string): string {
+    return html
+        // Headings
+        .replace(/<h1([^>]*)>/gi, '<h1$1 style="font-size:28px;font-weight:700;margin:24px 0 8px;color:#111827;line-height:1.2;">')
+        .replace(/<h2([^>]*)>/gi, '<h2$1 style="font-size:22px;font-weight:700;margin:20px 0 8px;color:#111827;line-height:1.3;">')
+        .replace(/<h3([^>]*)>/gi, '<h3$1 style="font-size:18px;font-weight:600;margin:16px 0 6px;color:#1f2937;line-height:1.4;">')
+        // Paragraphs
+        .replace(/<p([^>]*)>/gi, '<p$1 style="margin:0 0 14px;line-height:1.6;color:#374151;">')
+        // Bold & Italic
+        .replace(/<strong([^>]*)>/gi, '<strong$1 style="font-weight:700;">')
+        .replace(/<em([^>]*)>/gi, '<em$1 style="font-style:italic;">')
+        .replace(/<u([^>]*)>/gi, '<u$1 style="text-decoration:underline;">')
+        // Lists
+        .replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:0 0 14px 0;padding-left:24px;">')
+        .replace(/<ol([^>]*)>/gi, '<ol$1 style="margin:0 0 14px 0;padding-left:24px;">')
+        .replace(/<li([^>]*)>/gi, '<li$1 style="margin-bottom:6px;line-height:1.6;color:#374151;">')
+        // Blockquote
+        .replace(/<blockquote([^>]*)>/gi, '<blockquote$1 style="margin:16px 0;padding:12px 20px;border-left:4px solid #2563EB;background:#eff6ff;color:#1e40af;font-style:italic;">')
+        // Links
+        .replace(/<a([^>]*)>/gi, '<a$1 style="color:#2563EB;text-decoration:underline;">')
+}
+
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
     const transporter = getTransporter()
 
     const appUrl = "https://academy.pro-everest.com"
     const logoUrl = "https://academy.pro-everest.com/logo-white.png"
     const currentYear = new Date().getFullYear()
+    const styledHtml = inlineEmailStyles(html)
 
     const wrappedHtml = `<!DOCTYPE html>
 <html lang="fr">
@@ -52,7 +79,7 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
                     <!-- Content -->
                     <tr>
                         <td style="padding: 40px 40px 20px 40px; color: #1f2937; font-size: 16px; line-height: 1.6;">
-                            ${html}
+                            ${styledHtml}
                             
                             <!-- CTA Button -->
                             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 40px; margin-bottom: 20px;">
