@@ -109,6 +109,8 @@ export default async function SectionPage({ params }: { params: Promise<{ course
                                     <video
                                         src={section.video}
                                         controls
+                                        controlsList="nodownload"
+                                        onContextMenu={(e) => e.preventDefault()}
                                         playsInline
                                         preload="auto"
                                         className="w-full h-full object-contain bg-black"
