@@ -4,12 +4,12 @@ import { prisma } from "@/lib/prisma";
 import {
     ArrowLeft,
     Clock,
-    Video,
     ChevronRight,
 } from "lucide-react";
 import { QuizSection } from "@/components/quiz-section";
 import { SectionRating } from "@/components/section-rating";
 import { CourseNavigation } from "@/components/course-navigation";
+import { VideoPlayer } from "@/components/video-player";
 
 // Force dynamic rendering to avoid database access at build time
 export const dynamic = 'force-dynamic';
@@ -57,17 +57,6 @@ export default async function SectionPage({ params }: { params: Promise<{ course
     const prevSection = section.course.sections[currentIndex - 1];
     const nextSection = section.course.sections[currentIndex + 1];
 
-    // Video URL Formatting (Simple helper for Youtube/Vimeo)
-    const formatVideoUrl = (url: string) => {
-        if (url.includes('youtube.com/watch?v=')) {
-            return url.replace('watch?v=', 'embed/');
-        }
-        if (url.includes('youtu.be/')) {
-            return url.replace('youtu.be/', 'youtube.com/embed/');
-        }
-        return url;
-    };
-
     return (
         <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white">
 
@@ -104,31 +93,7 @@ export default async function SectionPage({ params }: { params: Promise<{ course
 
                         {/* Lecteur Vidéo */}
                         <div className="relative bg-[#050505] aspect-video mb-12 group overflow-hidden border-0 shadow-2xl rounded-none">
-                            {section.video ? (
-                                section.video.match(/\.(mp4|webm|mov)$/i) || section.video.includes('/uploads/') ? (
-                                    <video
-                                        src={section.video}
-                                        controls
-                                        controlsList="nodownload"
-                                        onContextMenu={(e) => e.preventDefault()}
-                                        playsInline
-                                        preload="auto"
-                                        className="w-full h-full object-contain bg-black"
-                                    />
-                                ) : (
-                                    <iframe
-                                        src={formatVideoUrl(section.video)}
-                                        title={section.title}
-                                        className="w-full h-full grayscale-[0.2] hover:grayscale-0 transition-all duration-700"
-                                        allowFullScreen
-                                    />
-                                )
-                            ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-gray-900">
-                                    <Video className="w-12 h-12 mb-4 opacity-50" />
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Contenu vidéo indisponible</p>
-                                </div>
-                            )}
+                            <VideoPlayer src={section.video} title={section.title} />
                         </div>
 
                         {/* Description / Summary */}
