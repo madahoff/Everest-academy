@@ -21,6 +21,12 @@ const COPY: Record<VerificationPurpose, { subject: string; title: string; intro:
         intro: "Cliquez sur le bouton ci-dessous pour vous connecter à votre compte :",
         cta: "Se connecter",
     },
+    RESET_PASSWORD: {
+        subject: "Réinitialisez votre mot de passe Everest",
+        title: "Réinitialisation du mot de passe",
+        intro: "Cliquez sur le bouton ci-dessous pour définir un nouveau mot de passe :",
+        cta: "Réinitialiser mon mot de passe",
+    },
 }
 
 export async function sendMagicLinkEmail({ to, link, purpose }: SendMagicLinkParams) {

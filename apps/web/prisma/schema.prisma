@@ -51,6 +51,7 @@ model User {
   email          String          @unique
   emailVerified  DateTime?       // Required for OAuth
   password       String?         // Hash password (optional for OAuth users)
+  passwordChangedAt DateTime?    // Used to invalidate JWT sessions issued before a password reset
   image          String?
   role           Role            @default(STUDENT)
   plan           Plan            @default(FREE)
@@ -266,6 +267,7 @@ model AccessCode {
 enum VerificationPurpose {
   SIGNUP
   LOGIN
+  RESET_PASSWORD
 }
 
 model VerificationLink {

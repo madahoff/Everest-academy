@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form"
 import { signIn } from "next-auth/react"
 import { Loader2, X, MailCheck } from "lucide-react"
 import * as Dialog from "@radix-ui/react-dialog"
+import Link from "next/link"
+import { PasswordInput } from "@/components/ui/password-input"
 
 const RESEND_COOLDOWN_SECONDS = 60
 
@@ -166,8 +168,15 @@ export function AuthDialog({
                                         <input {...register("email", { required: true })} type="email" className={inputStyle} placeholder="votre@email.com" />
                                     </div>
                                     <div>
-                                        <label className={labelStyle}>Mot de passe</label>
-                                        <input {...register("password", { required: true })} type="password" className={inputStyle} placeholder="••••••••" />
+                                        <div className="flex items-center justify-between">
+                                            <label className={labelStyle}>Mot de passe</label>
+                                            {mode === "login" && (
+                                                <Link href="/auth/forgot-password" className="text-[10px] font-bold uppercase tracking-widest text-[#2563EB] hover:text-black transition-colors mb-2">
+                                                    Oublié ?
+                                                </Link>
+                                            )}
+                                        </div>
+                                        <PasswordInput {...register("password", { required: true })} className={inputStyle} placeholder="••••••••" />
                                     </div>
                                     <button type="submit" disabled={loading} className={btnStyle}>
                                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Se connecter"}

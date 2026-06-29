@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form"
 import Link from "next/link"
 import Image from "next/image"
 import { Loader2, ArrowRight, MailCheck } from "lucide-react"
+import { PasswordInput } from "@/components/ui/password-input"
+import { validatePassword } from "@/lib/password"
 
 const RESEND_COOLDOWN_SECONDS = 60
 
@@ -15,7 +17,7 @@ export default function SignupPage() {
     const [formData, setFormData] = React.useState<{ name: string; email: string; password: string } | null>(null)
     const [cooldown, setCooldown] = React.useState(0)
 
-    const { register, handleSubmit } = useForm()
+    const { register, handleSubmit, formState: { errors } } = useForm()
 
     React.useEffect(() => {
         if (cooldown <= 0) return
@@ -118,12 +120,14 @@ export default function SignupPage() {
 
                         <div className="space-y-2">
                             <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Mot de passe</label>
-                            <input
-                                {...register("password", { required: true })}
-                                type="password"
+                            <PasswordInput
+                                {...register("password", { required: true, validate: (v) => validatePassword(v) || true })}
                                 className="w-full h-12 bg-gray-50 border-none px-4 text-sm font-bold focus:ring-1 focus:ring-[#2563EB] outline-none rounded-none"
                                 placeholder="••••••••"
                             />
+                            {errors.password && (
+                                <p className="text-[10px] font-bold text-red-500">{String(errors.password.message)}</p>
+                            )}
                         </div>
 
                         <button

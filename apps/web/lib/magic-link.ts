@@ -95,6 +95,19 @@ export async function createMagicLink({
     return { token, expiresAt }
 }
 
+// Read-only check, does not claim the token. Used for UX (e.g. show an error
+// immediately on page load instead of after the user fills out a form).
+export async function peekMagicLink({ token }: { token: string }) {
+    const tokenHash = hashToken(token)
+    const link = await prisma.verificationLink.findUnique({ where: { tokenHash } })
+
+    if (!link) return { ok: false as const, reason: "not_found" }
+    if (link.consumedAt) return { ok: false as const, reason: "already_used" }
+    if (link.expiresAt < new Date()) return { ok: false as const, reason: "expired" }
+
+    return { ok: true as const, purpose: link.purpose }
+}
+
 export async function consumeMagicLink({
     token,
     ip,

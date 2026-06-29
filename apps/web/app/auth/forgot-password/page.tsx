@@ -2,25 +2,20 @@
 
 import * as React from "react"
 import { useForm } from "react-hook-form"
-import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Loader2, ArrowRight, MailCheck, CheckCircle2 } from "lucide-react"
-import { PasswordInput } from "@/components/ui/password-input"
+import { Loader2, ArrowRight, MailCheck } from "lucide-react"
 
 const RESEND_COOLDOWN_SECONDS = 60
 
-export default function LoginPage() {
-    const searchParams = useSearchParams()
+export default function ForgotPasswordPage() {
     const [loading, setLoading] = React.useState(false)
     const [error, setError] = React.useState("")
     const [step, setStep] = React.useState<"form" | "sent">("form")
-    const [formData, setFormData] = React.useState<{ email: string; password: string } | null>(null)
+    const [email, setEmail] = React.useState("")
     const [cooldown, setCooldown] = React.useState(0)
-    const resetSuccess = searchParams.get("reset") === "success"
 
     const { register, handleSubmit } = useForm()
-    const callbackUrl = searchParams.get("callbackUrl") || "/"
 
     React.useEffect(() => {
         if (cooldown <= 0) return
@@ -28,11 +23,11 @@ export default function LoginPage() {
         return () => clearInterval(timer)
     }, [cooldown])
 
-    const requestLink = async (data: { email: string; password: string }) => {
-        const res = await fetch("/api/auth/request-link", {
+    const requestReset = async (targetEmail: string) => {
+        const res = await fetch("/api/auth/forgot-password", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ purpose: "LOGIN", callbackUrl, ...data }),
+            body: JSON.stringify({ email: targetEmail }),
         })
 
         if (!res.ok) {
@@ -41,32 +36,32 @@ export default function LoginPage() {
         }
     }
 
-    const onFormSubmit = async (data: any) => {
+    const onSubmitForm = async (data: any) => {
         setLoading(true)
         setError("")
 
         try {
-            await requestLink({ email: data.email, password: data.password })
-            setFormData({ email: data.email, password: data.password })
+            await requestReset(data.email)
+            setEmail(data.email)
             setStep("sent")
             setCooldown(RESEND_COOLDOWN_SECONDS)
-        } catch (error: any) {
-            setError(error.message || "Une erreur est survenue")
+        } catch (error) {
+            setError(error instanceof Error ? error.message : "Une erreur est survenue")
         } finally {
             setLoading(false)
         }
     }
 
     const onResend = async () => {
-        if (!formData || cooldown > 0) return
+        if (!email || cooldown > 0) return
         setLoading(true)
         setError("")
 
         try {
-            await requestLink(formData)
+            await requestReset(email)
             setCooldown(RESEND_COOLDOWN_SECONDS)
-        } catch (error: any) {
-            setError(error.message || "Une erreur est survenue")
+        } catch (error) {
+            setError(error instanceof Error ? error.message : "Une erreur est survenue")
         } finally {
             setLoading(false)
         }
@@ -86,18 +81,12 @@ export default function LoginPage() {
                         className="h-11 w-auto object-contain mx-auto mb-3"
                     />
                     <h1 className="text-3xl font-black uppercase tracking-tighter text-[#050505]">
-                        {step === "sent" ? "Vérifiez vos e-mails" : "Connexion"}
+                        {step === "form" ? "Mot de passe oublié" : "Vérifiez vos e-mails"}
                     </h1>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
-                        {step === "sent" ? "Confirmez votre email" : "Accédez à votre espace membre"}
+                        {step === "form" ? "Saisissez votre adresse e-mail" : "Lien de réinitialisation envoyé"}
                     </p>
                 </div>
-
-                {resetSuccess && step === "form" && (
-                    <div className="bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-widest p-3 border border-green-100 text-center mb-6 flex items-center justify-center gap-2">
-                        <CheckCircle2 className="w-4 h-4" /> Mot de passe réinitialisé, vous pouvez vous connecter
-                    </div>
-                )}
 
                 {error && (
                     <div className="bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-widest p-3 border border-red-100 text-center mb-6">
@@ -106,7 +95,7 @@ export default function LoginPage() {
                 )}
 
                 {step === "form" ? (
-                    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                    <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                         <div className="space-y-2">
                             <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Email</label>
                             <input
@@ -117,37 +106,19 @@ export default function LoginPage() {
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Mot de passe</label>
-                                <Link href="/auth/forgot-password" className="text-[10px] font-bold uppercase tracking-widest text-[#2563EB] hover:text-[#050505] transition-colors">
-                                    Mot de passe oublié ?
-                                </Link>
-                            </div>
-                            <PasswordInput
-                                {...register("password", { required: true })}
-                                className="w-full h-12 bg-gray-50 border-none px-4 text-sm font-bold focus:ring-1 focus:ring-[#2563EB] outline-none rounded-none"
-                                placeholder="••••••••"
-                            />
-                        </div>
-
                         <button
                             type="submit"
                             disabled={loading}
                             className="w-full h-12 bg-[#050505] text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#2563EB] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Continuer <ArrowRight className="w-3 h-3" /></>}
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Envoyer le lien <ArrowRight className="w-3 h-3" /></>}
                         </button>
                     </form>
                 ) : (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 text-center">
                         <MailCheck className="w-10 h-10 text-[#2563EB] mx-auto" />
-                        <div className="p-4 bg-gray-50 border border-gray-100">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Lien envoyé à</p>
-                            <p className="text-sm font-medium text-black mt-1">{formData?.email}</p>
-                        </div>
                         <p className="text-sm text-gray-500">
-                            Cliquez sur le bouton dans cet e-mail pour vous connecter automatiquement.
+                            Si un compte existe avec cette adresse, un e-mail contenant un lien de réinitialisation vient d&apos;être envoyé.
                         </p>
 
                         <button
@@ -164,16 +135,15 @@ export default function LoginPage() {
                             onClick={() => { setStep("form"); setError(""); }}
                             className="w-full text-center text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600"
                         >
-                            Modifier l&apos;email
+                            Modifier l&apos;adresse e-mail
                         </button>
                     </div>
                 )}
 
                 <div className="mt-8 text-center pt-6 border-t border-gray-50">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                        Pas encore de compte ?{" "}
-                        <Link href="/auth/signup" className="text-[#2563EB] hover:text-[#050505] ml-1 transition-colors">
-                            Créer un compte
+                        <Link href="/auth/login" className="text-[#2563EB] hover:text-[#050505] transition-colors">
+                            Retour à la connexion
                         </Link>
                     </p>
                 </div>

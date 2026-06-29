@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sendMagicLinkEmail } from "@/lib/email"
 import { createMagicLink, MagicLinkRateLimitError } from "@/lib/magic-link"
+import { validatePassword } from "@/lib/password"
 import bcrypt from "bcryptjs"
 
 function getClientIp(req: Request) {
@@ -30,6 +31,11 @@ export async function POST(req: Request) {
         if (purpose === "SIGNUP") {
             if (!name || !password) {
                 return NextResponse.json({ error: "Tous les champs sont requis" }, { status: 400 })
+            }
+
+            const passwordError = validatePassword(password)
+            if (passwordError) {
+                return NextResponse.json({ error: passwordError }, { status: 400 })
             }
 
             const existingUser = await prisma.user.findUnique({ where: { email } })

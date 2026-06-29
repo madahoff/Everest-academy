@@ -136,11 +136,32 @@ export const authOptions: AuthOptions = {
                     session.user.role = (user as any).role
                 }
             }
+
+            // Soft session invalidation: a JWT issued before the most recent
+            // password reset is no longer honored, even though the signed
+            // cookie itself remains valid until its natural expiry (inherent
+            // limitation of a stateless JWT strategy without a DB session store).
+            if (token?.sub && typeof token.pwdChangedAt === "number") {
+                const dbUser = await prisma.user.findUnique({
+                    where: { id: token.sub as string },
+                    select: { passwordChangedAt: true }
+                })
+                const currentChange = dbUser?.passwordChangedAt?.getTime() ?? 0
+                if (currentChange > (token.pwdChangedAt as number)) {
+                    return { ...session, user: undefined, expires: new Date(0).toISOString() } as any
+                }
+            }
+
             return session
         },
         async jwt({ token, user, account }) {
             if (user) {
                 token.role = (user as any).role
+                const dbUser = await prisma.user.findUnique({
+                    where: { id: user.id },
+                    select: { passwordChangedAt: true }
+                })
+                token.pwdChangedAt = dbUser?.passwordChangedAt?.getTime() ?? 0
             }
             if (account?.provider === "google") {
                 const dbUser = await prisma.user.findUnique({
