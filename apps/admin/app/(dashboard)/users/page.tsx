@@ -13,6 +13,7 @@ import {
     Loader2
 } from "lucide-react"
 import { UserFormDialog } from "@/components/dialogs/user-form-dialog"
+import { MembersBulkEmailDialog } from "@/components/dialogs/members-bulk-email-dialog"
 
 // --- TYPES ---
 interface UserData {
@@ -101,6 +102,7 @@ export default function UsersPage() {
                     <button className="px-6 py-3 border border-gray-200 text-[10px] font-bold uppercase tracking-[0.2em] hover:border-[#050505] transition-all">
                         Exporter Logs
                     </button>
+                    <MembersBulkEmailDialog users={users} />
                     <UserFormDialog onSuccess={handleRefresh} />
                 </div>
             </div>

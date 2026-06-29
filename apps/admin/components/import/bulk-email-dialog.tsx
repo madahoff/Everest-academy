@@ -13,13 +13,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Loader2, Send, Plus, X, Variable } from "lucide-react"
-import { useEditor, EditorContent } from "@tiptap/react"
-import StarterKit from "@tiptap/starter-kit"
-import Underline from "@tiptap/extension-underline"
-import Link from "@tiptap/extension-link"
-import Color from "@tiptap/extension-color"
-import { TextStyle } from "@tiptap/extension-text-style"
+import { Loader2, Send, Plus, X } from "lucide-react"
+import { VariableRichTextEditor } from "@/components/ui/variable-rich-text-editor"
+import { useBulkEmailSender } from "@/hooks/use-bulk-email-sender"
 import { toast } from "sonner"
 
 interface BulkEmailDialogProps {
@@ -31,10 +27,9 @@ interface BulkEmailDialogProps {
 
 export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialogProps) {
     const [subject, setSubject] = useState("")
-    const [sending, setSending] = useState(false)
-    const [sendResult, setSendResult] = useState<{ sent: number; failed: { email: string; error: string }[] } | null>(null)
+    const [htmlBody, setHtmlBody] = useState("<p>Bonjour {nom},</p><p></p><p>Cordialement,<br/>Everest Academy</p>")
     const [manualEmail, setManualEmail] = useState("")
-    const [progress, setProgress] = useState<{ current: number; total: number; pausing?: boolean } | null>(null)
+    const { send, sending, progress, result: sendResult, reset } = useBulkEmailSender()
 
     // Find email column
     const emailColumn = useMemo(() => {
@@ -58,27 +53,9 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
             })
             setSelectedEmails(emails)
             setAdditionalEmails([])
-            setSendResult(null)
-            setSending(false)
+            reset()
         }
     }, [open, rows, emailColumn])
-
-    const editor = useEditor({
-        extensions: [
-            StarterKit,
-            Underline,
-            Link.configure({ openOnClick: false }),
-            TextStyle,
-            Color,
-        ],
-        content: "<p>Bonjour {nom},</p><p></p><p>Cordialement,<br/>Everest Academy</p>",
-        immediatelyRender: false,
-        editorProps: {
-            attributes: {
-                class: "prose prose-sm max-w-none focus:outline-none min-h-[150px] p-4",
-            },
-        },
-    })
 
     const toggleEmail = (email: string) => {
         setSelectedEmails((prev) => {
@@ -127,17 +104,12 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
         })
     }
 
-    const insertVariable = (variable: string) => {
-        editor?.chain().focus().insertContent(`{${variable}}`).run()
-    }
-
     const handleSend = async () => {
         if (!subject.trim()) {
             toast.error("Le sujet est requis")
             return
         }
 
-        const htmlBody = editor?.getHTML() || ""
         if (!htmlBody || htmlBody === "<p></p>") {
             toast.error("Le corps du mail est requis")
             return
@@ -148,61 +120,12 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
             return
         }
 
-        setSending(true)
-        setSendResult(null)
-        setProgress(null)
+        const recipientsArray = Array.from(selectedEmails).map((email) => {
+            const row = rows.find((r) => r[emailColumn] === email)
+            return { email, variables: row || {} }
+        })
 
-        try {
-            // Build recipients with their row data for variable replacement
-            const recipientsArray = Array.from(selectedEmails).map((email) => {
-                const row = rows.find((r) => r[emailColumn] === email)
-                return { email, variables: row || {} }
-            })
-
-            setProgress({ current: 0, total: recipientsArray.length })
-            let sentCount = 0
-            const failedList: { email: string; error: string }[] = []
-
-            for (let i = 0; i < recipientsArray.length; i++) {
-                setProgress({ current: i + 1, total: recipientsArray.length })
-
-                try {
-                    const res = await fetch("/api/import/send-email", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ recipients: [recipientsArray[i]], subject, htmlBody }),
-                    })
-
-                    const data = await res.json()
-                    if (!res.ok) throw new Error(data.error)
-
-                    if (data.sent > 0) {
-                        sentCount++
-                    }
-                    if (data.failed?.length > 0) {
-                        failedList.push(...data.failed)
-                    }
-                } catch (err: any) {
-                    failedList.push({ email: recipientsArray[i].email, error: err.message || "Erreur d'envoi" })
-                }
-
-            }
-
-            const finalResult = { sent: sentCount, failed: failedList }
-            setSendResult(finalResult)
-
-            if (sentCount > 0) {
-                toast.success(`${sentCount} email(s) envoyé(s) avec succès`)
-            }
-            if (failedList.length > 0) {
-                toast.error(`${failedList.length} email(s) échoué(s)`)
-            }
-        } catch (err: any) {
-            toast.error(err.message || "Erreur lors de l'envoi global")
-        } finally {
-            setSending(false)
-            setProgress(null)
-        }
+        await send(recipientsArray, subject, htmlBody)
     }
 
     return (
@@ -302,42 +225,10 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
 
                     {/* Rich Text Editor */}
                     <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                            <Label className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">
-                                Corps du message
-                            </Label>
-                        </div>
-
-                        {/* Variable insertion buttons */}
-                        <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 border border-gray-200 border-b-0">
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-1 mr-2">
-                                <Variable className="w-3 h-3" /> Variables :
-                            </span>
-                            {headers.map((header) => (
-                                <button
-                                    key={header}
-                                    onClick={() => insertVariable(header)}
-                                    className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider bg-[#2563EB]/10 text-[#2563EB] hover:bg-[#2563EB]/20 transition"
-                                >
-                                    {`{${header}}`}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Toolbar */}
-                        {editor && (
-                            <div className="flex gap-1 p-2 bg-gray-50 border border-gray-200 border-b-0 border-t-0">
-                                <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 text-xs font-bold hover:bg-white transition ${editor.isActive("bold") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>B</button>
-                                <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 text-xs italic hover:bg-white transition ${editor.isActive("italic") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>I</button>
-                                <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 text-xs underline hover:bg-white transition ${editor.isActive("underline") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>U</button>
-                                <div className="w-px bg-gray-200 mx-1" />
-                                <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-1.5 text-xs hover:bg-white transition ${editor.isActive("bulletList") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>• Liste</button>
-                                <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-1.5 text-xs hover:bg-white transition ${editor.isActive("orderedList") ? "bg-white text-[#2563EB]" : "text-gray-500"}`}>1. Liste</button>
-                            </div>
-                        )}
-                        <div className="border border-gray-200 bg-white">
-                            <EditorContent editor={editor} />
-                        </div>
+                        <Label className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">
+                            Corps du message
+                        </Label>
+                        <VariableRichTextEditor content={htmlBody} onChange={setHtmlBody} variables={headers} />
                     </div>
 
                     {/* Send Results */}
@@ -386,9 +277,7 @@ export function BulkEmailDialog({ open, onClose, rows, headers }: BulkEmailDialo
                             <>
                                 <Loader2 className="w-3 h-3 animate-spin" />
                                 {progress
-                                    ? progress.pausing
-                                        ? `Pause entre lots (${progress.current}/${progress.total})...`
-                                        : `Envoi en cours (${progress.current}/${progress.total})...`
+                                    ? `Envoi en cours (${progress.current}/${progress.total})...`
                                     : "Envoi en cours..."}
                             </>
                         ) : (
