@@ -1,42 +1,50 @@
 "use client"
 
 import * as React from "react"
-import { signIn } from "next-auth/react"
 import { useForm } from "react-hook-form"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Loader2, ArrowRight } from "lucide-react"
+import { Loader2, ArrowRight, MailCheck } from "lucide-react"
+
+const RESEND_COOLDOWN_SECONDS = 60
 
 export default function SignupPage() {
-    const router = useRouter()
     const [loading, setLoading] = React.useState(false)
     const [error, setError] = React.useState("")
-    const [step, setStep] = React.useState<"form" | "otp">("form")
+    const [step, setStep] = React.useState<"form" | "sent">("form")
     const [formData, setFormData] = React.useState<{ name: string; email: string; password: string } | null>(null)
+    const [cooldown, setCooldown] = React.useState(0)
 
     const { register, handleSubmit } = useForm()
-    const { register: registerOtp, handleSubmit: handleSubmitOtp } = useForm()
+
+    React.useEffect(() => {
+        if (cooldown <= 0) return
+        const timer = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000)
+        return () => clearInterval(timer)
+    }, [cooldown])
+
+    const requestLink = async (data: { name: string; email: string; password: string }) => {
+        const res = await fetch("/api/auth/request-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ purpose: "SIGNUP", ...data }),
+        })
+
+        if (!res.ok) {
+            const json = await res.json()
+            throw new Error(json.error || "Erreur lors de l'envoi du lien")
+        }
+    }
 
     const onSubmitForm = async (data: any) => {
         setLoading(true)
         setError("")
 
         try {
-            // 1. Request OTP for email verification
-            const otpRes = await fetch("/api/auth/request-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: data.email }),
-            })
-
-            if (!otpRes.ok) {
-                throw new Error("Erreur lors de l'envoi du code de vérification")
-            }
-
-            // Store form data for later use
+            await requestLink({ name: data.name, email: data.email, password: data.password })
             setFormData({ name: data.name, email: data.email, password: data.password })
-            setStep("otp")
+            setStep("sent")
+            setCooldown(RESEND_COOLDOWN_SECONDS)
         } catch (error) {
             setError(error instanceof Error ? error.message : "Une erreur est survenue")
         } finally {
@@ -44,50 +52,14 @@ export default function SignupPage() {
         }
     }
 
-    const onVerifyOtp = async (data: any) => {
-        if (!formData) return
+    const onResend = async () => {
+        if (!formData || cooldown > 0) return
         setLoading(true)
         setError("")
 
         try {
-            // 1. Verify OTP first
-            const verifyRes = await fetch("/api/auth/verify-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: formData.email, code: data.code }),
-            })
-
-            if (!verifyRes.ok) {
-                const json = await verifyRes.json()
-                throw new Error(json.error || "Code invalide ou expiré")
-            }
-
-            // 2. OTP verified, now create the account
-            const signupRes = await fetch("/api/auth/signup", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
-            })
-
-            const signupJson = await signupRes.json()
-
-            if (!signupRes.ok) {
-                throw new Error(signupJson.error || "Erreur lors de l'inscription")
-            }
-
-            // 3. Auto Login
-            const result = await signIn("credentials", {
-                redirect: false,
-                email: formData.email,
-                password: formData.password,
-            })
-
-            if (result?.error) {
-                setError("Compte créé mais échec de connexion automatique")
-            } else {
-                router.push("/")
-                router.refresh()
-            }
+            await requestLink(formData)
+            setCooldown(RESEND_COOLDOWN_SECONDS)
         } catch (error) {
             setError(error instanceof Error ? error.message : "Une erreur est survenue")
         } finally {
@@ -109,7 +81,7 @@ export default function SignupPage() {
                         className="h-11 w-auto object-contain mx-auto mb-3"
                     />
                     <h1 className="text-3xl font-black uppercase tracking-tighter text-[#050505]">
-                        {step === "form" ? "Inscription" : "Vérification"}
+                        {step === "form" ? "Inscription" : "Vérifiez vos e-mails"}
                     </h1>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
                         {step === "form" ? "Rejoignez l'élite académique" : "Confirmez votre email"}
@@ -163,29 +135,23 @@ export default function SignupPage() {
                         </button>
                     </form>
                 ) : (
-                    <form onSubmit={handleSubmitOtp(onVerifyOtp)} className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                        <div className="text-center p-4 bg-gray-50 border border-gray-100 mb-4">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Code envoyé à</p>
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 text-center">
+                        <MailCheck className="w-10 h-10 text-[#2563EB] mx-auto" />
+                        <div className="p-4 bg-gray-50 border border-gray-100">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Lien envoyé à</p>
                             <p className="text-sm font-medium text-black mt-1">{formData?.email}</p>
                         </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Code de vérification</label>
-                            <input
-                                {...registerOtp("code", { required: true })}
-                                type="text"
-                                className="w-full h-12 bg-gray-50 border-none px-4 text-sm font-bold focus:ring-1 focus:ring-[#2563EB] outline-none rounded-none text-center tracking-[0.5em] text-lg"
-                                placeholder="123456"
-                                maxLength={6}
-                            />
-                        </div>
+                        <p className="text-sm text-gray-500">
+                            Cliquez sur le bouton dans cet e-mail pour activer votre compte et vous connecter automatiquement.
+                        </p>
 
                         <button
-                            type="submit"
-                            disabled={loading}
+                            type="button"
+                            onClick={onResend}
+                            disabled={loading || cooldown > 0}
                             className="w-full h-12 bg-[#050505] text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#2563EB] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Créer mon compte <ArrowRight className="w-3 h-3" /></>}
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : cooldown > 0 ? `Renvoyer le lien (${cooldown}s)` : "Renvoyer le lien"}
                         </button>
 
                         <button
@@ -193,9 +159,9 @@ export default function SignupPage() {
                             onClick={() => { setStep("form"); setError(""); }}
                             className="w-full text-center text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600"
                         >
-                            Modifier les informations
+                            Modifier l&apos;adresse e-mail
                         </button>
-                    </form>
+                    </div>
                 )}
 
                 <div className="mt-8 text-center pt-6 border-t border-gray-50">

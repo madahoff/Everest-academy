@@ -263,13 +263,37 @@ model AccessCode {
   @@map("access_codes")
 }
 
-model Otp {
-  id        String   @id @default(cuid())
-  email     String
-  code      String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+enum VerificationPurpose {
+  SIGNUP
+  LOGIN
+}
 
-  @@unique([email, code])
-  @@map("otps")
+model VerificationLink {
+  id         String              @id @default(cuid())
+  tokenHash  String              @unique
+  email      String
+  purpose    VerificationPurpose
+  payload    String?             @db.Text // JSON: { name, passwordHash } pour SIGNUP
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime            @default(now())
+  requestIp  String?
+
+  @@index([email, purpose, createdAt])
+  @@map("verification_links")
+}
+
+model AuthAuditLog {
+  id        String              @id @default(cuid())
+  email     String
+  purpose   VerificationPurpose
+  action    String // "REQUEST" | "CONSUME"
+  success   Boolean
+  reason    String? // ok, rate_limited, cooldown, invalid_credentials, email_taken, expired, already_used, not_found
+  ip        String?
+  userAgent String?             @db.Text
+  createdAt DateTime            @default(now())
+
+  @@index([email, createdAt])
+  @@map("auth_audit_logs")
 }

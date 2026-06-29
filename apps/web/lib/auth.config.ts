@@ -3,8 +3,17 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
+import { consumeMagicLink } from "@/lib/magic-link"
 import bcrypt from "bcryptjs"
 import type { Adapter } from "next-auth/adapters"
+import type { IncomingMessage } from "http"
+
+function getClientIp(req?: { headers?: IncomingMessage["headers"] }) {
+    const forwarded = req?.headers?.["x-forwarded-for"]
+    if (typeof forwarded === "string") return forwarded.split(",")[0].trim()
+    if (Array.isArray(forwarded)) return forwarded[0]
+    return null
+}
 
 export const authOptions: AuthOptions = {
     adapter: PrismaAdapter(prisma) as Adapter,
@@ -43,44 +52,52 @@ export const authOptions: AuthOptions = {
             }
         }),
         CredentialsProvider({
-            id: "otp",
-            name: "OTP",
+            id: "magic-link",
+            name: "Magic Link",
             credentials: {
-                email: { label: "Email", type: "email" },
-                code: { label: "Code", type: "text" }
+                token: { label: "Token", type: "text" }
             },
-            async authorize(credentials) {
-                if (!credentials?.email || !credentials?.code) return null
+            async authorize(credentials, req) {
+                if (!credentials?.token) return null
 
-                const { email, code } = credentials
+                const ip = getClientIp(req as any)
+                const result = await consumeMagicLink({ token: credentials.token, ip })
 
-                const otpRecord = await (prisma as any).otp.findFirst({
-                    where: {
-                        email,
-                        code,
-                        expiresAt: { gt: new Date() }
-                    }
-                })
-
-                if (!otpRecord) {
-                    throw new Error("Code invalide ou expiré")
+                if (!result.ok) {
+                    throw new Error("Lien invalide ou expiré")
                 }
 
-                await (prisma as any).otp.delete({ where: { id: otpRecord.id } })
+                if (result.purpose === "SIGNUP") {
+                    const { name, passwordHash } = JSON.parse(result.payload ?? "{}")
 
-                let user = await prisma.user.findUnique({
-                    where: { email }
-                })
-
-                if (!user) {
-                    user = await prisma.user.create({
-                        data: {
-                            email,
-                            name: email.split("@")[0],
+                    const user = await prisma.user.upsert({
+                        where: { email: result.email },
+                        update: {},
+                        create: {
+                            email: result.email,
+                            name,
+                            password: passwordHash,
                             role: "STUDENT",
                             plan: "FREE",
                         }
                     })
+
+                    return {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        image: user.image,
+                        role: user.role
+                    }
+                }
+
+                // LOGIN: le mot de passe a déjà été vérifié avant l'envoi du lien
+                const user = await prisma.user.findUnique({
+                    where: { email: result.email }
+                })
+
+                if (!user) {
+                    throw new Error("Compte introuvable")
                 }
 
                 return {

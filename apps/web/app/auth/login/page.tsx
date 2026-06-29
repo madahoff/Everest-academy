@@ -1,43 +1,53 @@
 "use client"
 
 import * as React from "react"
-import { signIn } from "next-auth/react"
 import { useForm } from "react-hook-form"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Loader2, ArrowRight } from "lucide-react"
+import { Loader2, ArrowRight, MailCheck } from "lucide-react"
+
+const RESEND_COOLDOWN_SECONDS = 60
 
 export default function LoginPage() {
-    const router = useRouter()
     const searchParams = useSearchParams()
     const [loading, setLoading] = React.useState(false)
     const [error, setError] = React.useState("")
-    const [step, setStep] = React.useState<"form" | "otp">("form")
+    const [step, setStep] = React.useState<"form" | "sent">("form")
     const [formData, setFormData] = React.useState<{ email: string; password: string } | null>(null)
+    const [cooldown, setCooldown] = React.useState(0)
 
     const { register, handleSubmit } = useForm()
-    const { register: registerOtp, handleSubmit: handleSubmitOtp } = useForm()
     const callbackUrl = searchParams.get("callbackUrl") || "/"
+
+    React.useEffect(() => {
+        if (cooldown <= 0) return
+        const timer = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000)
+        return () => clearInterval(timer)
+    }, [cooldown])
+
+    const requestLink = async (data: { email: string; password: string }) => {
+        const res = await fetch("/api/auth/request-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ purpose: "LOGIN", callbackUrl, ...data }),
+        })
+
+        if (!res.ok) {
+            const json = await res.json()
+            throw new Error(json.error || "Erreur lors de l'envoi du lien")
+        }
+    }
 
     const onFormSubmit = async (data: any) => {
         setLoading(true)
         setError("")
 
         try {
-            // Request OTP for email verification
-            const res = await fetch("/api/auth/request-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: data.email }),
-            })
-
-            if (!res.ok) {
-                throw new Error("Erreur lors de l'envoi du code")
-            }
-
+            await requestLink({ email: data.email, password: data.password })
             setFormData({ email: data.email, password: data.password })
-            setStep("otp")
+            setStep("sent")
+            setCooldown(RESEND_COOLDOWN_SECONDS)
         } catch (error: any) {
             setError(error.message || "Une erreur est survenue")
         } finally {
@@ -45,37 +55,14 @@ export default function LoginPage() {
         }
     }
 
-    const onVerifyOtp = async (data: any) => {
-        if (!formData) return
+    const onResend = async () => {
+        if (!formData || cooldown > 0) return
         setLoading(true)
         setError("")
 
         try {
-            // Verify OTP first
-            const verifyRes = await fetch("/api/auth/verify-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: formData.email, code: data.code }),
-            })
-
-            if (!verifyRes.ok) {
-                const json = await verifyRes.json()
-                throw new Error(json.error || "Code invalide ou expiré")
-            }
-
-            // OTP verified, now login
-            const result = await signIn("credentials", {
-                redirect: false,
-                email: formData.email,
-                password: formData.password,
-            })
-
-            if (result?.error) {
-                throw new Error("Email ou mot de passe incorrect")
-            }
-
-            router.push(callbackUrl)
-            router.refresh()
+            await requestLink(formData)
+            setCooldown(RESEND_COOLDOWN_SECONDS)
         } catch (error: any) {
             setError(error.message || "Une erreur est survenue")
         } finally {
@@ -97,10 +84,10 @@ export default function LoginPage() {
                         className="h-11 w-auto object-contain mx-auto mb-3"
                     />
                     <h1 className="text-3xl font-black uppercase tracking-tighter text-[#050505]">
-                        {step === "otp" ? "Vérification" : "Connexion"}
+                        {step === "sent" ? "Vérifiez vos e-mails" : "Connexion"}
                     </h1>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
-                        {step === "otp" ? "Confirmez votre email" : "Accédez à votre espace membre"}
+                        {step === "sent" ? "Confirmez votre email" : "Accédez à votre espace membre"}
                     </p>
                 </div>
 
@@ -141,29 +128,23 @@ export default function LoginPage() {
                         </button>
                     </form>
                 ) : (
-                    <form onSubmit={handleSubmitOtp(onVerifyOtp)} className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                        <div className="text-center p-4 bg-gray-50 border border-gray-100 mb-4">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Code envoyé à</p>
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 text-center">
+                        <MailCheck className="w-10 h-10 text-[#2563EB] mx-auto" />
+                        <div className="p-4 bg-gray-50 border border-gray-100">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Lien envoyé à</p>
                             <p className="text-sm font-medium text-black mt-1">{formData?.email}</p>
                         </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Code de vérification</label>
-                            <input
-                                {...registerOtp("code", { required: true })}
-                                type="text"
-                                className="w-full h-12 bg-gray-50 border-none px-4 text-sm font-bold focus:ring-1 focus:ring-[#2563EB] outline-none rounded-none text-center tracking-[0.5em] text-lg"
-                                placeholder="123456"
-                                maxLength={6}
-                            />
-                        </div>
+                        <p className="text-sm text-gray-500">
+                            Cliquez sur le bouton dans cet e-mail pour vous connecter automatiquement.
+                        </p>
 
                         <button
-                            type="submit"
-                            disabled={loading}
+                            type="button"
+                            onClick={onResend}
+                            disabled={loading || cooldown > 0}
                             className="w-full h-12 bg-[#050505] text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#2563EB] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Se Connecter <ArrowRight className="w-3 h-3" /></>}
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : cooldown > 0 ? `Renvoyer le lien (${cooldown}s)` : "Renvoyer le lien"}
                         </button>
 
                         <button
@@ -171,9 +152,9 @@ export default function LoginPage() {
                             onClick={() => { setStep("form"); setError(""); }}
                             className="w-full text-center text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600"
                         >
-                            Modifier l'email
+                            Modifier l&apos;email
                         </button>
-                    </form>
+                    </div>
                 )}
 
                 <div className="mt-8 text-center pt-6 border-t border-gray-50">
