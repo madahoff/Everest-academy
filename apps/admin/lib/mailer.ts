@@ -1,21 +1,9 @@
-import nodemailer from "nodemailer"
+import { Resend } from "resend"
 
-function getTransporter() {
-    const host = process.env.SMTP_HOST || "smtp.hostinger.com"
-    const port = Number(process.env.SMTP_PORT) || 465
-    const secure = process.env.SMTP_SECURE !== "false" // true by default
-    const user = process.env.SMTP_USER || "contact@pro-everest.com"
-    const pass = process.env.SMTP_PASSWORD || ""
-
-    console.log("[mailer] SMTP config:", { host, port, secure, user, passSet: !!pass })
-
-    return nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        requireTLS: port === 587,
-        auth: { user, pass },
-    })
+function getResendClient() {
+    const apiKey = process.env.RESEND_API_KEY || ""
+    console.log("[mailer] Resend config:", { apiKeySet: !!apiKey })
+    return new Resend(apiKey)
 }
 
 interface SendEmailOptions {
@@ -51,7 +39,7 @@ function inlineEmailStyles(html: string): string {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
-    const transporter = getTransporter()
+    const resend = getResendClient()
 
     const appUrl = "https://academy.pro-everest.com"
     const logoUrl = "https://academy.pro-everest.com/logo-white.png"
@@ -110,13 +98,13 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
 </body>
 </html>`
 
-    const fromEmail = process.env.SMTP_FROM || "contact@pro-everest.com"
-    const fromName = "Everest Academy"
+    const from = process.env.EMAIL_FROM || '"Everest Academy" <noreply@pro-everest.com>'
+    const replyTo = from.match(/<(.+)>/)?.[1] || from
 
-    return await transporter.sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
+    const { data, error } = await resend.emails.send({
+        from,
         to,
-        replyTo: fromEmail,
+        replyTo,
         subject,
         text: "Pour visualiser cet email, veuillez activer l'affichage HTML dans votre messagerie.",
         html: wrappedHtml,
@@ -125,6 +113,12 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
             "X-Mailer": "EverestMailer",
         }
     })
+
+    if (error) {
+        throw new Error(`Message failed: ${error.message}`)
+    }
+
+    return data
 }
 
 export function replaceVariables(template: string, variables: Record<string, string>): string {

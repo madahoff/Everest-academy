@@ -23,25 +23,16 @@ export async function POST(request: Request) {
         const body: SendEmailRequest = await request.json()
         const { recipients, subject, htmlBody } = body
 
-        console.log("[send-email] Checking SMTP config...")
-        const smtpConfig = {
-            host: process.env.SMTP_HOST,
-            port: process.env.SMTP_PORT,
-            user: process.env.SMTP_USER,
-            passSet: !!process.env.SMTP_PASSWORD,
-            secure: process.env.SMTP_SECURE,
-        }
-        console.log("[send-email] SMTP config found:", { ...smtpConfig, user: smtpConfig.user ? "***" : undefined })
+        console.log("[send-email] Checking Resend config...")
+        console.log("[send-email] Resend config found:", { apiKeySet: !!process.env.RESEND_API_KEY })
 
-        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-            console.error("[send-email] Missing SMTP variables:", smtpConfig)
+        if (!process.env.RESEND_API_KEY) {
+            console.error("[send-email] Missing RESEND_API_KEY")
             return NextResponse.json({
-                error: "Configuration SMTP manquante sur le serveur.",
-                details: "Assurez-vous que SMTP_HOST, SMTP_USER et SMTP_PASSWORD sont définis dans Dokploy.",
+                error: "Configuration Resend manquante sur le serveur.",
+                details: "Assurez-vous que RESEND_API_KEY est défini dans Dokploy.",
                 debug_config: {
-                    host: !!process.env.SMTP_HOST,
-                    user: !!process.env.SMTP_USER,
-                    pass: !!process.env.SMTP_PASSWORD
+                    apiKey: !!process.env.RESEND_API_KEY
                 }
             }, { status: 500 })
         }
@@ -80,7 +71,7 @@ export async function POST(request: Request) {
                     html: personalizedBody,
                 })
                 
-                console.log(`[send-email] Successfully sent to ${recipient.email}. MessageId: ${info?.messageId}`)
+                console.log(`[send-email] Successfully sent to ${recipient.email}. MessageId: ${info?.id}`)
 
                 results.sent++
             } catch (err: any) {

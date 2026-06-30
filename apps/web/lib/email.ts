@@ -1,5 +1,5 @@
 
-import nodemailer from "nodemailer"
+import { Resend } from "resend"
 import type { VerificationPurpose } from "@prisma/client"
 
 type SendMagicLinkParams = {
@@ -33,26 +33,18 @@ export async function sendMagicLinkEmail({ to, link, purpose }: SendMagicLinkPar
     const copy = COPY[purpose]
     const ttlMinutes = process.env.MAGIC_LINK_TTL_MINUTES || "15"
 
-    // If no SMTP credentials, just log it (dev mode)
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+    // If no Resend API key, just log it (dev mode)
+    if (!process.env.RESEND_API_KEY) {
         console.log("==========================================")
         console.log(`[DEV] Magic link (${purpose}) pour ${to}: ${link}`)
         console.log("==========================================")
         return
     }
 
-    const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || "587"),
-        secure: false,
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASSWORD,
-        },
-    })
+    const resend = new Resend(process.env.RESEND_API_KEY)
 
-    await transporter.sendMail({
-        from: process.env.SMTP_FROM || '"Everest" <noreply@everest.pro>',
+    const { error } = await resend.emails.send({
+        from: process.env.EMAIL_FROM || '"Everest" <noreply@pro-everest.com>',
         to,
         subject: copy.subject,
         html: `
@@ -71,4 +63,8 @@ export async function sendMagicLinkEmail({ to, link, purpose }: SendMagicLinkPar
             </div>
         `,
     })
+
+    if (error) {
+        throw new Error(`Message failed: ${error.message}`)
+    }
 }
