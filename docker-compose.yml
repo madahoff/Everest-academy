@@ -36,12 +36,8 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${ADMIN_URL}
       - AUTH_TRUST_HOST=true
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - SMTP_FROM=${SMTP_FROM}
-      - SMTP_SECURE=${SMTP_SECURE}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
     volumes:
       - shared_uploads:/app/apps/admin/public/uploads
     ports:
@@ -81,13 +77,9 @@ services:
       - AUTH_TRUST_HOST=true
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      # SMTP Configuration for Magic Link emails
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - SMTP_FROM=${SMTP_FROM}
-      - SMTP_SECURE=${SMTP_SECURE}
+      # Resend Configuration for Magic Link emails
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
       # Magic Link Configuration
       - MAGIC_LINK_TTL_MINUTES=${MAGIC_LINK_TTL_MINUTES:-15}
       - MAGIC_LINK_RATE_LIMIT_MAX=${MAGIC_LINK_RATE_LIMIT_MAX:-3}
