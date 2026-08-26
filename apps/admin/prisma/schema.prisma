@@ -44,29 +44,59 @@ enum CourseLevel {
   EXPERT
 }
 
+// Moyen de règlement d'une commande ou d'une recharge.
+// WALLET       : débit du solde du portefeuille Wallet API (aucun passage par Vanilla Pay)
+// MOBILE_MONEY : paiement Vanilla Pay Mobile Money (MVola, Orange Money, Airtel Money)
+// CARD         : paiement Vanilla Pay international (carte bancaire / PayPal)
+enum PaymentMethod {
+  WALLET
+  MOBILE_MONEY
+  CARD
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum TopupStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
 // Models
 model User {
-  id             String          @id @default(cuid())
-  name           String
-  email          String          @unique
-  emailVerified  DateTime?       // Required for OAuth
-  password       String?         // Hash password (optional for OAuth users)
-  passwordChangedAt DateTime?    // Used to invalidate JWT sessions issued before a password reset
-  image          String?
-  role           Role            @default(STUDENT)
-  plan           Plan            @default(FREE)
-  status         UserStatus      @default(ACTIVE)
-  walletBalance  Decimal         @default(0.00) @db.Decimal(10, 2)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                String     @id @default(cuid())
+  name              String
+  email             String     @unique
+  emailVerified     DateTime? // Required for OAuth
+  password          String? // Hash password (optional for OAuth users)
+  passwordChangedAt DateTime? // Used to invalidate JWT sessions issued before a password reset
+  image             String?
+  role              Role       @default(STUDENT)
+  plan              Plan       @default(FREE)
+  status            UserStatus @default(ACTIVE)
+  walletBalance     Decimal    @default(0.00) @db.Decimal(10, 2)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  accounts       Account[]       // OAuth accounts
-  sessions       Session[]       // User sessions
+  accounts       Account[] // OAuth accounts
+  sessions       Session[] // User sessions
   favorites      Favorite[]
   purchases      Purchase[]
   cart           CartItem[]
   accessCodes    AccessCode[]
   sectionRatings SectionRating[]
+  orders         Order[]
+  topups         WalletTopup[]
+
+  // Identifiant du portefeuille chez le Wallet API (UUID). Le portefeuille est toujours
+  // adressable par `ext:<user.id>` ; ce champ n'est conservé que pour le support.
+  walletId String?
 
   @@map("users")
 }
@@ -129,9 +159,9 @@ model Course {
   id           String       @id @default(cuid())
   title        String
   description  String       @db.Text
-  heroImage    String       // Grande image CTA pour page de détail
-  cardImage    String       // Petite image pour cards/listes
-  welcomeVideo String       // URL vidéo de présentation
+  heroImage    String // Grande image CTA pour page de détail
+  cardImage    String // Petite image pour cards/listes
+  welcomeVideo String // URL vidéo de présentation
   price        Decimal      @db.Decimal(10, 2)
   duration     String       @default("Variable") // Durée du cours (ex: "2h 30min", "5 semaines")
   level        CourseLevel  @default(INTERMEDIATE) // Niveau du cours
@@ -142,6 +172,7 @@ model Course {
   purchases    Purchase[]
   cartItems    CartItem[]
   accessCodes  AccessCode[]
+  orderItems   OrderItem[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -154,11 +185,11 @@ model Section {
   course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title       String
   description String          @db.Text
-  heroImage   String          // Grande image CTA section
-  cardImage   String          // Image moyenne pour cards
-  video       String          // Vidéo pédagogique
+  heroImage   String // Grande image CTA section
+  cardImage   String // Image moyenne pour cards
+  video       String // Vidéo pédagogique
   summary     String          @db.Text // Résumé pour révision
-  duration    String?         // Durée estimée (ex: "15 min")
+  duration    String? // Durée estimée (ex: "15 min")
   order       Int             @default(0)
   questions   Question[]
   ratings     SectionRating[]
@@ -174,7 +205,7 @@ model SectionRating {
   section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  rating    Int      // 1-5 stars
+  rating    Int // 1-5 stars
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -214,9 +245,10 @@ model Product {
   status    ProductStatus @default(IN_STOCK)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
-  
-  purchases Purchase[]
-  cartItems CartItem[]
+
+  purchases  Purchase[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
 
   @@map("products")
 }
@@ -275,7 +307,7 @@ model VerificationLink {
   tokenHash  String              @unique
   email      String
   purpose    VerificationPurpose
-  payload    String?             @db.Text
+  payload    String?             @db.Text // JSON: { name, passwordHash } pour SIGNUP
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime            @default(now())
@@ -289,13 +321,102 @@ model AuthAuditLog {
   id        String              @id @default(cuid())
   email     String
   purpose   VerificationPurpose
-  action    String
+  action    String // "REQUEST" | "CONSUME"
   success   Boolean
-  reason    String?
+  reason    String? // ok, rate_limited, cooldown, invalid_credentials, email_taken, expired, already_used, not_found
   ip        String?
   userAgent String?             @db.Text
   createdAt DateTime            @default(now())
 
   @@index([email, createdAt])
   @@map("auth_audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paiements — adossés au Wallet API MADA.H (https://wallet-api.madahoff.com)
+//
+// Le Wallet API est la source de vérité du SOLDE et des ENCAISSEMENTS ; ces deux
+// modèles ne tiennent que ce que lui ignore : à quelle commande Everest se rattache
+// un paiement, et quel accès accorder quand il réussit.
+//
+// Le Wallet API n'émet aucun webhook sortant : l'issue d'un paiement direct
+// s'apprend en sondant GET /v1/payments/:reference. `Order.paymentReference` est
+// la poignée qui permet ce rattrapage.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Order {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount   Decimal @db.Decimal(10, 2)
+  currency String  @default("MGA")
+
+  method PaymentMethod
+  status OrderStatus   @default(PENDING)
+
+  // Référence du paiement chez le Wallet API (méthodes MOBILE_MONEY / CARD).
+  // Nulle pour un règlement au solde, qui n'ouvre aucun paiement Vanilla Pay.
+  paymentReference String? @unique
+  paymentUrl       String? @db.Text
+  // Ligne de grand livre du débit, pour un règlement au solde (méthode WALLET).
+  ledgerEntryId    String?
+
+  failureReason String?   @db.Text
+  paidAt        DateTime?
+  // Horodatage de l'octroi effectif des accès. Sert de verrou : une commande dont
+  // grantedAt est déjà renseigné ne peut plus créer de Purchase en double.
+  grantedAt     DateTime?
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  courseId  String?
+  course    Course?  @relation(fields: [courseId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  // Titre figé au moment de l'achat : le catalogue peut changer, pas une facture.
+  title  String
+  amount Decimal @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model WalletTopup {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Référence du paiement chez le Wallet API (PAYxxxx).
+  reference String @unique
+
+  amount   Decimal       @db.Decimal(10, 2)
+  currency String        @default("MGA")
+  method   PaymentMethod // MOBILE_MONEY ou CARD — jamais WALLET
+  status   TopupStatus   @default(INITIATED)
+
+  // Le Wallet API distingue « encaissé » (status SUCCESS) de « portefeuille crédité »
+  // (settled). Une recharge SUCCESS non settled attend une régularisation manuelle.
+  settled         Boolean @default(false)
+  settlementError String? @db.Text
+  paymentUrl      String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@map("wallet_topups")
 }

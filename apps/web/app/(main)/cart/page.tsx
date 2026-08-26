@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCart } from "@/component/cart-provider";
 import { useAuthModal } from "@/component/auth-modal-provider";
+import PaymentMethods from "@/components/payment-methods";
 import {
     ShoppingCart,
     Minus,
@@ -14,8 +15,7 @@ import {
     CreditCard,
     Truck,
     ShieldCheck,
-    ChevronRight,
-    Loader2
+    ChevronRight
 } from "lucide-react";
 
 // --- HELPERS ---
@@ -59,49 +59,16 @@ export default function Cart() {
     const { data: session } = useSession();
     const { cart, removeFromCart, addToCart, clearCart, isLoading } = useCart();
     const { openAuth } = useAuthModal();
-    const [isCheckingOut, setIsCheckingOut] = useState(false);
-    const [checkoutError, setCheckoutError] = useState("");
-
     const cartItems = useMemo(() => groupCartItems(cart), [cart]);
     const subtotal = cart.reduce((sum, item) => sum + Number(item.price), 0);
     const shipping = 0; // Digital goods mostly
     const total = subtotal + shipping;
 
-    const handleCheckout = async () => {
-        if (!session) {
-            openAuth('login');
-            return;
-        }
-
-        setIsCheckingOut(true);
-        setCheckoutError("");
-
-        try {
-            const res = await fetch('/api/checkout', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items: cart })
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                if (data.error === "INSUFFICIENT_FUNDS") {
-                    // Redirect to Wallet Topup or show error
-                    throw new Error("Solde insuffisant. Veuillez recharger votre portefeuille.");
-                }
-                throw new Error(data.error || "Erreur lors du paiement");
-            }
-
-            // Success
-            clearCart();
-            router.push('/profile?tab=courses'); // Redirect to generic profile, maybe add success param
-
-        } catch (error: any) {
-            setCheckoutError(error.message);
-        } finally {
-            setIsCheckingOut(false);
-        }
+    // Le règlement est confirmé par le serveur (débit du solde ou paiement Vanilla Pay
+    // encaissé) : c'est seulement à ce moment que le panier local est vidé.
+    const handlePaid = () => {
+        clearCart();
+        router.push('/profile?tab=courses');
     };
 
     if (isLoading) {
@@ -187,32 +154,29 @@ export default function Cart() {
                                 </div>
                             </div>
 
-                            {checkoutError && (
-                                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold uppercase tracking-widest text-center">
-                                    {checkoutError}
-                                    {checkoutError.includes("Solde") && (
-                                        <button
-                                            onClick={() => router.push('/wallet')}
-                                            className="block mt-2 underline hover:text-white mx-auto"
-                                        >
-                                            Recharger le portefeuille
-                                        </button>
-                                    )}
-                                </div>
+                            {session ? (
+                                <PaymentMethods
+                                    endpoint="/api/checkout"
+                                    amount={total}
+                                    label={`Panier Everest (${cartItems.length} article${cartItems.length > 1 ? 's' : ''})`}
+                                    returnPath="/cart"
+                                    loginCallbackUrl="/cart"
+                                    onPaid={handlePaid}
+                                    dark
+                                />
+                            ) : (
+                                <Button
+                                    variant="checkout"
+                                    className="w-full py-5 text-sm"
+                                    onClick={() => openAuth('login')}
+                                >
+                                    <CreditCard className="w-4 h-4" /> Se connecter pour payer
+                                </Button>
                             )}
-
-                            <Button
-                                variant="checkout"
-                                className="w-full py-5 text-sm"
-                                onClick={handleCheckout}
-                                disabled={isCheckingOut}
-                            >
-                                {isCheckingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CreditCard className="w-4 h-4" /> Payer avec mon Solde</>}
-                            </Button>
 
                             <div className="mt-6 flex flex-col gap-3">
                                 <div className="flex items-center gap-3 text-[9px] text-gray-500 uppercase tracking-widest">
-                                    <ShieldCheck className="w-3 h-3 text-[#2563EB]" /> Paiement sécurisé par Everest Wallet
+                                    <ShieldCheck className="w-3 h-3 text-[#2563EB]" /> Paiement sécurisé — Vanilla Pay International
                                 </div>
                             </div>
                         </Card>

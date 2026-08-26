@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Play, Heart, Share2, Award, Layers, Info, CheckCircle, X, Volume2, VolumeX, Ticket, Loader2, ChevronDown, ChevronUp, Sparkles, PlayCircle, Lock, Trophy, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import PaymentMethods from "@/components/payment-methods";
 
 const Button = ({ children, variant = "primary", size = "md", className = "", onClick, disabled, ...props }: any) => {
     const baseStyle = "font-bold uppercase tracking-widest transition-all duration-300 rounded-none border flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -53,7 +54,6 @@ function isDirectVideo(url: string): boolean {
 export default function CourseSidebar({ course, isPurchased, isFavorited = false, isFree = false }: { course: any, isPurchased: boolean, isFavorited?: boolean, isFree?: boolean }) {
     const router = useRouter();
     const { data: session } = useSession();
-    const [loading, setLoading] = useState(false);
     const [isLiked, setIsLiked] = useState(isFavorited);
     const [showVideo, setShowVideo] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
@@ -136,19 +136,6 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
         }
     };
 
-    const handleBuy = async () => {
-        if (!session) {
-            router.push(`/auth/login?callbackUrl=/courses/${course.id}`);
-            return;
-        }
-
-        setLoading(true);
-        setTimeout(() => {
-            toast.info("Redirection vers le paiement (Module Shop à implémenter)");
-            setLoading(false);
-        }, 1000);
-    };
-
     // State for free enrollment
     const [enrollLoading, setEnrollLoading] = useState(false);
 
@@ -223,14 +210,36 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
                 </Button>
             ) : (
                 <>
-                    {/* Access Code Section */}
+                    {/* Achat direct — aucun code d'accès requis */}
+                    <PaymentMethods
+                        endpoint={`/api/courses/${course.id}/purchase`}
+                        amount={parseFloat(course.price)}
+                        label={course.title}
+                        returnPath={`/courses/${course.id}`}
+                        onPaid={(order) => {
+                            // Accès accordés : on emmène directement à la première section.
+                            if (order.firstSectionId) {
+                                router.push(`/courses/${course.id}/${order.firstSectionId}`);
+                            } else {
+                                router.refresh();
+                            }
+                        }}
+                    />
+
+                    <div className="flex items-center gap-3 my-5">
+                        <span className="h-px flex-1 bg-gray-100" />
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-300">ou</span>
+                        <span className="h-px flex-1 bg-gray-100" />
+                    </div>
+
+                    {/* Code d'accès — chemin secondaire, pour les codes déjà distribués */}
                     <div className="mb-4">
                         <button
                             onClick={() => setShowCodeInput(!showCodeInput)}
                             className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-[#2563EB] transition-colors"
                         >
                             <Ticket className="w-3 h-3" />
-                            Utiliser un code d'accès
+                            J'ai un code d'accès
                             {showCodeInput ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
 

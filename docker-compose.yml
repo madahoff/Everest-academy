@@ -85,6 +85,10 @@ services:
       - MAGIC_LINK_RATE_LIMIT_MAX=${MAGIC_LINK_RATE_LIMIT_MAX:-3}
       - MAGIC_LINK_RATE_LIMIT_WINDOW_MINUTES=${MAGIC_LINK_RATE_LIMIT_WINDOW_MINUTES:-15}
       - MAGIC_LINK_RESEND_COOLDOWN_SECONDS=${MAGIC_LINK_RESEND_COOLDOWN_SECONDS:-60}
+      # Wallet API MADA.H — portefeuille et paiements Vanilla Pay
+      - WALLET_API_URL=${WALLET_API_URL}
+      - WALLET_API_KEY=${WALLET_API_KEY}
+      - APP_PUBLIC_URL=${WEB_URL}
     volumes:
       - shared_uploads:/app/apps/web/public/uploads
     ports:
