@@ -56,6 +56,19 @@ function modeFor(method: PaymentMethod): walletApi.PaymentMode {
     return method === "CARD" ? "international" : "mobile_money";
 }
 
+/**
+ * Vanilla Pay refuse le champ `panier` au-delà d'une longueur qu'il ne documente
+ * nulle part — il répond « Panier trop long », et le paiement n'est jamais ouvert.
+ * Ses propres exemples tiennent en une dizaine de caractères (`panier123`), d'où
+ * cette troncature franche : ce libellé n'est qu'un repère visuel sur la page de
+ * paiement, la vraie identification de la commande passe par `externalReference`.
+ */
+const VPI_LABEL_MAX = 20;
+
+function vpiLabel(value: string): string {
+    return value.trim().slice(0, VPI_LABEL_MAX).trim();
+}
+
 // ─── Portefeuille ─────────────────────────────────────────────────────────────
 
 /**
@@ -304,7 +317,7 @@ export async function createAndPayOrder(input: {
                 currency: CURRENCY,
                 mode: modeFor(method),
                 externalReference: order.id,
-                label: input.label ?? "Formation Everest Academy",
+                label: vpiLabel(input.label ?? "Formation Everest"),
                 returnUrl: absoluteReturnUrl(input.returnPath),
                 metadata: { orderId: order.id, userId },
             },
@@ -466,7 +479,7 @@ export async function createTopup(input: {
             amount: minorAmount,
             currency: CURRENCY,
             mode: modeFor(input.method),
-            label: "Recharge portefeuille Everest",
+            label: vpiLabel("Recharge Everest"),
             returnUrl: absoluteReturnUrl(input.returnPath ?? "/wallet"),
             metadata: { userId: input.userId },
         },
