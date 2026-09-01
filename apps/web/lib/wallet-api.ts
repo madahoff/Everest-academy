@@ -95,6 +95,15 @@ export class WalletApiError extends Error {
 const BASE_URL = (process.env.WALLET_API_URL || "").replace(/\/+$/, "");
 const API_KEY = process.env.WALLET_API_KEY || "";
 
+/**
+ * Les clés d'idempotence sont scopées par APPLICATION, pas par produit. La caisse
+ * étant désormais partagée avec Viktoo, deux produits qui choisiraient la même
+ * valeur — « order-42 » — se confondraient : le second recevrait la réponse
+ * mémorisée du premier, ou un 409. Le préfixe est appliqué ici, au seul endroit
+ * qui émet l'en-tête, pour qu'aucun appelant ne puisse l'oublier.
+ */
+const IDEMPOTENCY_PREFIX = "everest";
+
 /** Le module de paiement est-il configuré ? Permet de dégrader proprement en dev. */
 export function isWalletApiConfigured(): boolean {
     return Boolean(BASE_URL && API_KEY);
@@ -144,7 +153,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         Accept: "application/json",
     };
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
-    if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+    if (options.idempotencyKey) {
+        headers["Idempotency-Key"] = `${IDEMPOTENCY_PREFIX}-${options.idempotencyKey}`;
+    }
 
     let response: Response;
     try {
@@ -222,9 +233,33 @@ export function fromMinorUnits(value: string | null | undefined): number {
 
 // ─── Portefeuilles ────────────────────────────────────────────────────────────
 
-/** Désigne un portefeuille par l'identifiant Everest de son porteur. */
-export function walletRef(userId: string): string {
-    return `ext:${encodeURIComponent(userId)}`;
+/**
+ * Normalise une adresse e-mail employée comme externalId : trim puis minuscules,
+ * et RIEN D'AUTRE.
+ *
+ * En particulier on ne retire ni les points ni les suffixes +… : ce sont des
+ * adresses distinctes pour la plupart des serveurs de messagerie, et les confondre
+ * donnerait à jean+test@ l'accès au solde de jean@.
+ *
+ * Cette règle doit rester identique, au caractère près, à celle de Viktoo
+ * (`normalizeEmailExternalId` de @repo/wallet-client) : `Jean@X.mg` et `jean@x.mg`
+ * sont deux portefeuilles distincts. Everest vivant dans un autre dépôt, elle est
+ * ici dupliquée et non importée — toute évolution doit être répercutée des deux
+ * côtés.
+ */
+export function normalizeEmailExternalId(email: string): string {
+    return email.trim().toLowerCase();
+}
+
+/**
+ * Désigne le portefeuille d'une personne par son e-mail.
+ *
+ * Seul l'identifiant est encodé, jamais le préfixe `ext:` — le service applique un
+ * decodeURIComponent sur le paramètre, et encoder les deux ferait un décodage de
+ * trop sur un identifiant contenant lui-même un %.
+ */
+export function walletRefForEmail(email: string): string {
+    return `ext:${encodeURIComponent(normalizeEmailExternalId(email))}`;
 }
 
 /** Idempotent sur externalId : rappelable à chaque connexion, renvoie l'existant. */
@@ -238,22 +273,22 @@ export function createWallet(input: {
     return request("/v1/wallets", { method: "POST", body: input });
 }
 
-export function getWallet(userId: string): Promise<WalletDto> {
-    return request(`/v1/wallets/${walletRef(userId)}`);
+export function getWallet(ref: string): Promise<WalletDto> {
+    return request(`/v1/wallets/${ref}`);
 }
 
 export function updateWallet(
-    userId: string,
+    ref: string,
     input: { msisdn?: string | null; holderName?: string | null; status?: "ACTIVE" | "FROZEN" },
 ): Promise<WalletDto> {
-    return request(`/v1/wallets/${walletRef(userId)}`, { method: "PATCH", body: input });
+    return request(`/v1/wallets/${ref}`, { method: "PATCH", body: input });
 }
 
 export function listTransactions(
-    userId: string,
+    ref: string,
     query: { limit?: number; cursor?: string; type?: string; direction?: "CREDIT" | "DEBIT" } = {},
 ): Promise<CursorPage<LedgerEntryDto>> {
-    return request(`/v1/wallets/${walletRef(userId)}/transactions`, { query });
+    return request(`/v1/wallets/${ref}/transactions`, { query });
 }
 
 /**
@@ -262,20 +297,20 @@ export function listTransactions(
  * simultanés ne peuvent pas rendre un solde négatif.
  */
 export function debitWallet(
-    userId: string,
+    ref: string,
     input: { amount: number; description?: string; externalReference?: string; metadata?: Record<string, unknown> },
     idempotencyKey: string,
 ): Promise<{ transaction: LedgerEntryDto; balance: string }> {
-    return request(`/v1/wallets/${walletRef(userId)}/debit`, { method: "POST", body: input, idempotencyKey });
+    return request(`/v1/wallets/${ref}/debit`, { method: "POST", body: input, idempotencyKey });
 }
 
 /** Crédit (remboursement d'une commande annulée, geste commercial…). */
 export function creditWallet(
-    userId: string,
+    ref: string,
     input: { amount: number; description?: string; externalReference?: string; metadata?: Record<string, unknown> },
     idempotencyKey: string,
 ): Promise<{ transaction: LedgerEntryDto; balance: string }> {
-    return request(`/v1/wallets/${walletRef(userId)}/credit`, { method: "POST", body: input, idempotencyKey });
+    return request(`/v1/wallets/${ref}/credit`, { method: "POST", body: input, idempotencyKey });
 }
 
 // ─── Paiements (argent entrant via Vanilla Pay) ───────────────────────────────

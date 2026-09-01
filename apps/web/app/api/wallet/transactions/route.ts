@@ -27,8 +27,8 @@ export async function GET(request: Request) {
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 25;
 
     try {
-        await ensureUserWallet(session.user.id);
-        const page = await listTransactions(session.user.id, {
+        const { ref } = await ensureUserWallet(session.user.id);
+        const page = await listTransactions(ref, {
             limit,
             cursor: searchParams.get("cursor") ?? undefined,
             type: searchParams.get("type") ?? undefined,

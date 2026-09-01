@@ -12,7 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import * as walletApi from "@/lib/wallet-api";
-import { WalletApiError, fromMinorUnits, toMinorUnits, walletRef } from "@/lib/wallet-api";
+import { WalletApiError, fromMinorUnits, toMinorUnits, walletRefForEmail } from "@/lib/wallet-api";
 import type { Order, OrderItem, PaymentMethod } from "@prisma/client";
 
 /** Erreur métier Everest (distincte d'une erreur du service de paiement). */
@@ -72,19 +72,29 @@ function vpiLabel(value: string): string {
 // ─── Portefeuille ─────────────────────────────────────────────────────────────
 
 /**
- * Ouvre (ou retrouve) le portefeuille de l'utilisateur. L'appel est idempotent sur
- * `externalId` côté service : on peut l'invoquer à chaque affichage sans risque.
+ * Ouvre (ou retrouve) le portefeuille de l'utilisateur. Idempotent sur `externalId`
+ * côté service : invocable à chaque affichage sans risque.
+ *
+ * L'identité du portefeuille est l'E-MAIL, pas l'identifiant Everest — c'est la
+ * condition pour que le solde soit le même sur Everest et sur Viktoo, qui partagent
+ * désormais une seule application au sens du Wallet API.
+ *
+ * L'e-mail est relu EN BASE et jamais pris dans le jeton de session : il donne accès
+ * à l'argent, la source de vérité doit être la table `users`.
  */
-export async function ensureUserWallet(userId: string): Promise<walletApi.WalletDto> {
+export async function ensureUserWallet(userId: string): Promise<{ wallet: walletApi.WalletDto; ref: string }> {
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, name: true, walletId: true },
+        select: { id: true, name: true, email: true, walletId: true },
     });
 
     if (!user) throw new CheckoutError("user_not_found", 404, "Utilisateur introuvable");
+    if (!user.email) throw new CheckoutError("missing_email", 400, "Aucune adresse e-mail sur ce compte");
+
+    const ref = walletRefForEmail(user.email);
 
     const { wallet } = await walletApi.createWallet({
-        externalId: user.id,
+        externalId: walletApi.normalizeEmailExternalId(user.email),
         currency: CURRENCY,
         holderName: user.name || undefined,
         metadata: { app: "everest-academy" },
@@ -94,7 +104,7 @@ export async function ensureUserWallet(userId: string): Promise<walletApi.Wallet
         await prisma.user.update({ where: { id: user.id }, data: { walletId: wallet.id } });
     }
 
-    return wallet;
+    return { wallet, ref };
 }
 
 /**
@@ -122,7 +132,7 @@ export interface WalletSummary {
 }
 
 export async function getWalletSummary(userId: string): Promise<WalletSummary> {
-    const wallet = await ensureUserWallet(userId);
+    const { wallet } = await ensureUserWallet(userId);
     await mirrorBalance(userId, wallet.balance);
     return {
         walletId: wallet.id,
@@ -263,12 +273,12 @@ export async function createAndPayOrder(input: {
     });
 
     if (method === "WALLET") {
-        await ensureUserWallet(userId);
+        const { ref } = await ensureUserWallet(userId);
 
         let result: { transaction: walletApi.LedgerEntryDto; balance: string };
         try {
             result = await walletApi.debitWallet(
-                userId,
+                ref,
                 {
                     amount: minorTotal,
                     description: input.label ?? `Commande Everest ${order.id}`,
@@ -470,12 +480,12 @@ export async function createTopup(input: {
     }
 
     const minorAmount = toMinorUnits(input.amount);
-    await ensureUserWallet(input.userId);
+    const { ref } = await ensureUserWallet(input.userId);
 
     const payment = await walletApi.createPayment(
         {
             purpose: "TOPUP",
-            walletRef: walletRef(input.userId),
+            walletRef: ref,
             amount: minorAmount,
             currency: CURRENCY,
             mode: modeFor(input.method),
@@ -533,9 +543,10 @@ export async function syncTopup(reference: string, userId: string) {
         },
     });
 
+    // Le portefeuille a été crédité par le Wallet API : on rafraîchit le miroir
+    // d'affichage. Un échec ici n'a aucune conséquence sur l'argent réel.
     if (payment.settled) {
-        const wallet = await walletApi.getWallet(userId).catch(() => null);
-        if (wallet) await mirrorBalance(userId, wallet.balance);
+        await getWalletSummary(userId).catch(() => null);
     }
 
     return updated;
