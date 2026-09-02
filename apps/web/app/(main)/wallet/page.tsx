@@ -16,6 +16,7 @@ import {
     AlertTriangle,
 } from "lucide-react";
 import PaymentDialog, { type PaymentMode } from "@/components/payment-dialog";
+import { TRANSACTION_TYPE_LABELS as TYPE_LABELS } from "@/lib/wallet-labels";
 
 const PRESET_AMOUNTS = [10000, 25000, 50000, 100000];
 const MIN_TOPUP = 1000;
@@ -30,15 +31,6 @@ interface Transaction {
     description: string | null;
     createdAt: string;
 }
-
-const TYPE_LABELS: Record<string, string> = {
-    TOPUP: "Recharge",
-    PAYMENT: "Achat",
-    REFUND: "Remboursement",
-    PAYOUT: "Retrait",
-    PAYOUT_REVERSAL: "Retrait annulé",
-    ADJUSTMENT: "Régularisation",
-};
 
 function WalletPageContent() {
     const { data: session, status: sessionStatus } = useSession();
@@ -214,7 +206,7 @@ function WalletPageContent() {
                         <div className="flex-1">
                             <h1 className="text-2xl font-bold uppercase tracking-tighter">Mon Portefeuille</h1>
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                                Wallet MADA.H · Vanilla Pay International
+                                wallet.h · Vanilla Pay International
                             </p>
                         </div>
                         <button

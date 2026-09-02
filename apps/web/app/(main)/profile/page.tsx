@@ -22,6 +22,7 @@ import {
     Wallet
 } from "lucide-react"
 import DeleteAccountSection from "@/components/delete-account-section"
+import ProfileWalletCard from "@/components/profile-wallet-card"
 
 // --- COMPOSANTS UI INTERNES ---
 
@@ -79,7 +80,8 @@ export default async function Profile() {
 
     // Calcul des stats
     const totalCourses = dbUser.purchases.filter((p: any) => p.courseId).length
-    const walletBalance = parseFloat(dbUser.walletBalance?.toString() || "0").toFixed(2)
+    // Miroir local du solde : affiché le temps que la carte interroge le Wallet API.
+    const walletBalance = parseFloat(dbUser.walletBalance?.toString() || "0")
     const joinDate = new Date(dbUser.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 
     const stats = [
@@ -237,6 +239,8 @@ export default async function Profile() {
 
                     {/* Colonne Droite : Sidebar Paramètres */}
                     <div className="space-y-8">
+                        <ProfileWalletCard initialBalance={walletBalance} />
+
                         {/* <Card className="p-8">
                             <h3 className="text-xs font-bold uppercase tracking-widest mb-8 border-b border-gray-100 pb-4">Gestion du compte</h3>
 
