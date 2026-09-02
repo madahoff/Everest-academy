@@ -32,6 +32,11 @@ export interface PremiumPlan {
      * de Madagascar. Aucun repli par conversion — voir `lib/pricing.ts`.
      */
     priceEur: number | null;
+    /**
+     * Modules annoncés sur la durée de l'offre — l'année académique. `null` : on
+     * annonce ce qui est publié. Voir `PremiumOffer.announcedCourseCount`.
+     */
+    announcedCourseCount: number | null;
     /** Offre proposée à la vente. Retirée, elle n'ôte aucun accès déjà accordé. */
     active: boolean;
 }
@@ -39,10 +44,13 @@ export interface PremiumPlan {
 /** Réglage courant du pack, tel que la console d'administration l'a fixé. */
 export async function getPremiumPlan(): Promise<PremiumPlan> {
     const plan = await prisma.premiumPlan.findUnique({ where: { id: PREMIUM_PLAN_ID } });
-    if (!plan) return { price: DEFAULT_PREMIUM_PACK_PRICE, priceEur: null, active: true };
+    if (!plan) {
+        return { price: DEFAULT_PREMIUM_PACK_PRICE, priceEur: null, announcedCourseCount: null, active: true };
+    }
     return {
         price: Number(plan.price),
         priceEur: plan.priceEur === null ? null : Number(plan.priceEur),
+        announcedCourseCount: plan.announcedCourseCount,
         active: plan.active,
     };
 }
@@ -58,8 +66,17 @@ export interface PremiumOffer {
     catalogueValue: number;
     /** Économie réalisée par rapport à l'achat à l'unité (jamais négative). */
     savings: number;
-    /** Nombre total de modules débloqués par le pack. */
+    /** Modules DÉJÀ PUBLIÉS, ouverts dès l'achat. */
     courseCount: number;
+    /**
+     * Modules ANNONCÉS sur la durée de l'offre — le programme de l'année, dont une
+     * partie n'est pas encore parue. C'est ce nombre que lit l'acheteur : le pack se
+     * vend sur un programme, pas sur l'état du catalogue le jour de l'achat.
+     *
+     * Réglé depuis la console d'administration ; à défaut, il vaut le nombre publié,
+     * et le bandeau retombe alors sur son ancien discours.
+     */
+    announcedCourseCount: number;
     premiumCourseCount: number;
 }
 
@@ -93,6 +110,9 @@ export async function getPremiumOffer(currency: Currency): Promise<PremiumOffer>
         catalogueValue,
         savings: price === null ? 0 : Math.max(0, catalogueValue - price),
         courseCount: courses.length,
+        // Un programme annoncé inférieur au catalogue publié serait un réglage
+        // périmé : on ne promet jamais moins que ce qui est déjà ouvert.
+        announcedCourseCount: Math.max(plan.announcedCourseCount ?? 0, courses.length),
         premiumCourseCount: prices.filter((p) => p > 0).length,
     };
 }

@@ -15,6 +15,12 @@ const DEFAULT_PRICE = 199_000
  */
 const MAX_PRICE = 100_000_000
 
+/**
+ * Plafond du programme annoncé. Une année académique compte quelques dizaines de
+ * modules au plus : au-delà, c'est une faute de frappe.
+ */
+const MAX_ANNOUNCED = 500
+
 async function readPlan() {
     const plan = await prisma.premiumPlan.findUnique({ where: { id: PREMIUM_PLAN_ID } })
     return {
@@ -22,6 +28,8 @@ async function readPlan() {
         // Pas de tarif de repli en euros : tant qu'il n'est pas saisi, le pack n'est
         // pas proposé hors de Madagascar. Une valeur inventée serait pire qu'aucune.
         priceEur: plan?.priceEur == null ? null : Number(plan.priceEur),
+        // NULL : on annonce le nombre de cours réellement publiés.
+        announcedCourseCount: plan?.announcedCourseCount ?? null,
         active: plan ? plan.active : true,
         updatedAt: plan?.updatedAt ?? null,
     }
@@ -57,6 +65,23 @@ async function readContext() {
         soldCount: orders.length,
         revenue: orders.reduce((sum, item) => sum + Number(item.amount), 0),
     }
+}
+
+/** Nombre de modules annoncés : entier positif, ou rien du tout. */
+function parseAnnounced(raw: unknown): { value: number | null } | { error: string } {
+    if (raw === undefined || raw === null || raw === "") return { value: null }
+
+    const value = Number(raw)
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+        return { error: "Le nombre de modules annoncés doit être un entier" }
+    }
+    // Zéro n'annonce rien : c'est une saisie à effacer, pas un programme vide.
+    if (value === 0) return { value: null }
+    if (value < 0 || value > MAX_ANNOUNCED) {
+        return { error: `Le nombre de modules annoncés doit être compris entre 1 et ${MAX_ANNOUNCED}` }
+    }
+
+    return { value }
 }
 
 /** GET /api/premium — réglage courant du Pack Premium et chiffres de contexte. */
@@ -99,15 +124,22 @@ export async function PUT(request: Request) {
         const eur = parsePriceEur(body.priceEur)
         if ("error" in eur) return NextResponse.json({ error: eur.error }, { status: 400 })
 
+        // Programme annoncé sur l'année. Vidé, le bandeau retombe sur le nombre de
+        // cours publiés. Volontairement NON contraint au catalogue : c'est une
+        // promesse commerciale qu'on formule avant d'avoir tout publié.
+        const announced = parseAnnounced(body.announcedCourseCount)
+        if ("error" in announced) return NextResponse.json({ error: announced.error }, { status: 400 })
+
         const plan = await prisma.premiumPlan.upsert({
             where: { id: PREMIUM_PLAN_ID },
-            update: { price, priceEur: eur.value, active },
-            create: { id: PREMIUM_PLAN_ID, price, priceEur: eur.value, active },
+            update: { price, priceEur: eur.value, announcedCourseCount: announced.value, active },
+            create: { id: PREMIUM_PLAN_ID, price, priceEur: eur.value, announcedCourseCount: announced.value, active },
         })
 
         return NextResponse.json({
             price: Number(plan.price),
             priceEur: plan.priceEur == null ? null : Number(plan.priceEur),
+            announcedCourseCount: plan.announcedCourseCount,
             active: plan.active,
             updatedAt: plan.updatedAt,
         })

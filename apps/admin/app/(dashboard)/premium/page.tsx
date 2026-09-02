@@ -21,6 +21,11 @@ interface PremiumPlanData {
     price: number
     /** Tarif hors Madagascar. `null` : le pack n'y est pas proposé. */
     priceEur: number | null
+    /**
+     * Modules annoncés sur l'année. `null` : le bandeau annonce le nombre de cours
+     * réellement publiés — ce que fait `courseCount`.
+     */
+    announcedCourseCount: number | null
     active: boolean
     updatedAt: string | null
     courseCount: number
@@ -70,6 +75,7 @@ export default function PremiumPage() {
 
     const [price, setPrice] = useState("")
     const [priceEur, setPriceEur] = useState("")
+    const [announced, setAnnounced] = useState("")
     const [active, setActive] = useState(true)
     const [formError, setFormError] = useState<string | null>(null)
     const [saved, setSaved] = useState(false)
@@ -82,11 +88,17 @@ export default function PremiumPage() {
         // Champ VIDE quand il n'y a pas de tarif international : « 0 » se lirait
         // comme la gratuité, et « null » comme une valeur.
         setPriceEur(data.priceEur === null ? "" : String(data.priceEur))
+        setAnnounced(data.announcedCourseCount === null ? "" : String(data.announcedCourseCount))
         setActive(data.active)
     }, [data])
 
     const mutation = useMutation({
-        mutationFn: async (payload: { price: number; priceEur: number | null; active: boolean }) => {
+        mutationFn: async (payload: {
+            price: number
+            priceEur: number | null
+            announcedCourseCount: number | null
+            active: boolean
+        }) => {
             const res = await fetch("/api/premium", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -112,8 +124,21 @@ export default function PremiumPage() {
     const eurError = "error" in parsedEur ? parsedEur.error : null
     const eurValue = "error" in parsedEur ? null : parsedEur.value
 
+    // Programme annoncé : entier positif, ou champ vide (= annoncer le publié).
+    const announcedTrimmed = announced.trim()
+    const announcedNumber = Number(announcedTrimmed)
+    const announcedValue =
+        announcedTrimmed === "" || announcedNumber === 0 ? null : announcedNumber
+    const announcedError =
+        announcedValue !== null && (!Number.isInteger(announcedValue) || announcedValue < 0)
+            ? "Le nombre de modules annoncés doit être un entier positif"
+            : null
+
     const dirty = data
-        ? parsedPrice !== data.price || eurValue !== data.priceEur || active !== data.active
+        ? parsedPrice !== data.price ||
+          eurValue !== data.priceEur ||
+          announcedValue !== data.announcedCourseCount ||
+          active !== data.active
         : false
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -126,7 +151,16 @@ export default function PremiumPage() {
             setFormError(eurError)
             return
         }
-        mutation.mutate({ price: parsedPrice, priceEur: eurValue, active })
+        if (announcedError) {
+            setFormError(announcedError)
+            return
+        }
+        mutation.mutate({
+            price: parsedPrice,
+            priceEur: eurValue,
+            announcedCourseCount: announcedValue,
+            active,
+        })
     }
 
     const savings = data ? data.catalogueValue - (priceValid ? parsedPrice : data.price) : 0
@@ -228,6 +262,35 @@ export default function PremiumPage() {
                             {eurError ?? "Euros entiers · réglable par carte bancaire uniquement"}
                         </p>
 
+                        {/*
+                          Programme annoncé. Le catalogue sait compter les cours PUBLIÉS ;
+                          il ne peut pas deviner le programme de l'année, dont une partie
+                          n'est pas encore parue au moment de l'achat.
+                        */}
+                        <label className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                            <Layers className="w-3 h-3" /> Modules annoncés sur l'année
+                        </label>
+                        <div className="flex items-center border-b-2 border-[#050505] focus-within:border-[#2563EB] transition-colors mb-3">
+                            <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={announced}
+                                onChange={(e) => setAnnounced(e.target.value)}
+                                className="flex-1 bg-transparent py-4 text-4xl font-black tracking-tighter italic outline-none"
+                                placeholder={String(data.courseCount)}
+                            />
+                            <span className="text-sm font-black uppercase tracking-widest text-gray-300 pl-4">modules</span>
+                        </div>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-10 ${announcedError ? "text-red-500" : "text-gray-400"}`}>
+                            {announcedError ??
+                                (announcedValue === null
+                                    ? `Vide : le site annonce les ${data.courseCount} cours publiés`
+                                    : announcedValue > data.courseCount
+                                        ? `${data.courseCount} publiés · ${announcedValue - data.courseCount} annoncés à venir`
+                                        : "Le programme annoncé n'excède pas le catalogue publié")}
+                        </p>
+
                         {/* Mise en vente */}
                         <div className="flex items-start justify-between gap-8 border-t border-gray-100 pt-8 mb-10">
                             <div>
@@ -311,7 +374,9 @@ export default function PremiumPage() {
                         <div className="flex items-center gap-6">
                             <button
                                 type="submit"
-                                disabled={mutation.isPending || !dirty || !priceValid || eurError !== null}
+                                disabled={
+                                    mutation.isPending || !dirty || !priceValid || eurError !== null || announcedError !== null
+                                }
                                 className="px-10 py-4 bg-[#050505] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#2563EB] transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-3"
                             >
                                 {mutation.isPending ? (

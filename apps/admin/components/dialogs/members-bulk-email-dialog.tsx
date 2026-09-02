@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import * as React from "react"
+import { useMemo, useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -24,26 +25,56 @@ interface MemberData {
     plan: string
 }
 
+/** À qui l'envoi s'adresse. Le choix est explicite, jamais deviné au moment d'envoyer. */
+type Scope = "all" | "filtered" | "selected"
+
 interface MembersBulkEmailDialogProps {
+    /** Tout l'annuaire. */
     users: MemberData[]
+    /** Ce que la recherche et les filtres laissent voir. */
+    filtered?: MemberData[]
+    /** Les lignes cochées dans la liste. */
+    selected?: MemberData[]
+    trigger?: React.ReactNode
 }
 
 const VARIABLES = ["name", "email", "role", "plan"]
 
-export function MembersBulkEmailDialog({ users }: MembersBulkEmailDialogProps) {
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
+export function MembersBulkEmailDialog({
+    users,
+    filtered = users,
+    selected = [],
+    trigger,
+}: MembersBulkEmailDialogProps) {
     const [open, setOpen] = useState(false)
     const [subject, setSubject] = useState("")
     const [htmlBody, setHtmlBody] = useState("<p>Bonjour {name},</p><p></p><p>Cordialement,<br/>Everest Academy</p>")
+    const [scope, setScope] = useState<Scope>("all")
     const { send, sending, progress, result: sendResult, reset } = useBulkEmailSender()
 
-    const recipients = useMemo(
-        () => users.filter((u) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u.email)),
-        [users]
+    /** Trois viviers, chacun débarrassé des adresses inexploitables. */
+    const pools = useMemo(
+        () => ({
+            all: users.filter((u) => isValidEmail(u.email)),
+            filtered: filtered.filter((u) => isValidEmail(u.email)),
+            selected: selected.filter((u) => isValidEmail(u.email)),
+        }),
+        [users, filtered, selected],
     )
+
+    const isFiltered = filtered.length !== users.length
+    const recipients = pools[scope]
 
     const handleOpenChange = (v: boolean) => {
         if (!v && sending) return
-        if (v) reset()
+        if (v) {
+            reset()
+            // Le champ le plus étroit fait foi à l'ouverture : on vise une sélection
+            // faite exprès avant de viser tout l'annuaire.
+            setScope(selected.length > 0 ? "selected" : isFiltered ? "filtered" : "all")
+        }
         setOpen(v)
     }
 
@@ -59,7 +90,7 @@ export function MembersBulkEmailDialog({ users }: MembersBulkEmailDialogProps) {
         }
 
         if (recipients.length === 0) {
-            toast.error("Aucun membre avec une adresse email valide")
+            toast.error("Aucun destinataire avec une adresse email valide")
             return
         }
 
@@ -71,12 +102,20 @@ export function MembersBulkEmailDialog({ users }: MembersBulkEmailDialogProps) {
         await send(recipientsArray, subject, htmlBody)
     }
 
+    const scopes: { key: Scope; label: string; hint: string; count: number; disabled?: boolean }[] = [
+        { key: "selected", label: "Sélection", hint: "Lignes cochées", count: pools.selected.length, disabled: selected.length === 0 },
+        { key: "filtered", label: "Résultat du filtre", hint: "Recherche et filtres en cours", count: pools.filtered.length, disabled: !isFiltered },
+        { key: "all", label: "Tout l'annuaire", hint: "Tous les membres", count: pools.all.length },
+    ]
+
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
-                <button className="px-6 py-3 border border-gray-200 text-[10px] font-bold uppercase tracking-[0.2em] hover:border-[#050505] transition-all flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5" /> Envoyer un Email
-                </button>
+                {trigger || (
+                    <button className="px-6 py-3 border border-gray-200 text-[10px] font-bold uppercase tracking-[0.2em] hover:border-[#050505] transition-all flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5" /> Envoyer un Email
+                    </button>
+                )}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[800px] max-h-[90vh] rounded-none border-0 shadow-xl overflow-hidden flex flex-col">
                 <DialogHeader className="border-b border-gray-100 pb-4 shrink-0">
@@ -84,14 +123,43 @@ export function MembersBulkEmailDialog({ users }: MembersBulkEmailDialogProps) {
                         Envoi Groupé d&apos;Emails
                     </DialogTitle>
                     <DialogDescription className="text-[9px] uppercase tracking-widest text-gray-400">
-                        Envoyer un email personnalisé à tous les membres de l&apos;annuaire
+                        Choisissez les destinataires, puis rédigez le message
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto py-4 space-y-6">
-                    <div className="border border-gray-200 bg-gray-50/50 px-4 py-3">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">
-                            {recipients.length} membre{recipients.length > 1 ? "s" : ""} recevra{recipients.length > 1 ? "ont" : ""} cet email
+                    {/* Destinataires */}
+                    <div className="space-y-1.5">
+                        <Label className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">
+                            Destinataires
+                        </Label>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                            {scopes.map((option) => (
+                                <button
+                                    key={option.key}
+                                    type="button"
+                                    onClick={() => setScope(option.key)}
+                                    disabled={option.disabled || sending}
+                                    className={`border p-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${scope === option.key
+                                        ? "border-[#2563EB] bg-[#2563EB]/5"
+                                        : "border-gray-200 hover:border-[#050505]"
+                                        }`}
+                                >
+                                    <span className="block text-[9px] font-black uppercase tracking-[0.15em] text-[#050505]">
+                                        {option.label}
+                                    </span>
+                                    <span className="block text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                                        {option.hint}
+                                    </span>
+                                    <span className="mt-1 block text-lg font-black italic tracking-tighter text-[#2563EB]">
+                                        {option.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                            {recipients.length} membre{recipients.length > 1 ? "s" : ""} recevra
+                            {recipients.length > 1 ? "ont" : ""} cet email · les adresses invalides sont écartées
                         </p>
                     </div>
 

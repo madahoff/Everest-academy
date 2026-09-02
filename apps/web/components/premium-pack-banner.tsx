@@ -18,7 +18,10 @@ export interface PremiumOffer {
     active: boolean;
     catalogueValue: number;
     savings: number;
+    /** Modules déjà publiés, ouverts dès l'achat. */
     courseCount: number;
+    /** Modules annoncés sur l'année — le programme vendu, parutions à venir comprises. */
+    announcedCourseCount: number;
     premiumCourseCount: number;
 }
 
@@ -86,6 +89,12 @@ export default function PremiumPackBanner({
     // Passé les deux retours ci-dessus, le tarif est nécessairement présent.
     const price = offer.price as number;
 
+    // Le programme annoncé dépasse-t-il ce qui est déjà paru ? Si oui, on vend
+    // l'année entière en disant combien de modules sont ouverts aujourd'hui : gonfler
+    // le chiffre sans le préciser ferait passer une promesse pour un inventaire.
+    const announced = offer.announcedCourseCount;
+    const upcoming = announced - offer.courseCount;
+
     const openCheckout = () => {
         if (!session) {
             openAuth("login");
@@ -121,8 +130,18 @@ export default function PremiumPackBanner({
                         </h2>
 
                         <p className="text-gray-400 font-light leading-relaxed max-w-xl border-l-2 border-[#2563EB] pl-6 mb-10">
-                            Un paiement unique débloque les {offer.courseCount} MasterClass publiées — et toutes celles
-                            qui viendront s'y ajouter. Plus de choix à faire cours par cours.
+                            {upcoming > 0 ? (
+                                <>
+                                    Un paiement unique couvre les {announced} MasterClass de l'année :
+                                    les {offer.courseCount} déjà publiées s'ouvrent immédiatement, et chacune des{" "}
+                                    {upcoming} suivantes dès sa parution. Plus de choix à faire cours par cours.
+                                </>
+                            ) : (
+                                <>
+                                    Un paiement unique débloque les {announced} MasterClass publiées — et toutes celles
+                                    qui viendront s'y ajouter. Plus de choix à faire cours par cours.
+                                </>
+                            )}
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-5">
@@ -201,8 +220,12 @@ export default function PremiumPackBanner({
 
                                 <ul className="space-y-3 mb-8 border-t border-gray-800 pt-8">
                                     {[
-                                        `${offer.courseCount} MasterClass débloquées`,
-                                        "Mises à jour et nouveaux modules inclus",
+                                        upcoming > 0
+                                            ? `${announced} MasterClass sur l'année`
+                                            : `${announced} MasterClass débloquées`,
+                                        upcoming > 0
+                                            ? `${offer.courseCount} déjà ouvertes, ${upcoming} à venir`
+                                            : "Mises à jour et nouveaux modules inclus",
                                         "Accès à vie, sans abonnement",
                                     ].map((item) => (
                                         <li key={item} className="flex items-center gap-3 text-xs text-gray-300">

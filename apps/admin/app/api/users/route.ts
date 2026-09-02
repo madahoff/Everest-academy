@@ -11,11 +11,31 @@ export async function GET() {
     try {
         // `select` explicite : sans lui, findMany renvoie la ligne entière — hachage de
         // mot de passe compris — à tout appelant de la console.
+        //
+        // Les achats de cours accompagnent chaque compte : c'est ce qui permet à
+        // l'annuaire d'afficher et de modifier les accès sans une requête par ligne.
+        // Un compte PREMIUM voit tout le catalogue quoi qu'il arrive (voir
+        // `lib/course-access.ts`) ; `courseIds` ne porte que les accès unitaires.
         const users = await prisma.user.findMany({
             orderBy: { createdAt: 'desc' },
-            select: USER_SELECT,
+            select: {
+                ...USER_SELECT,
+                purchases: {
+                    where: { courseId: { not: null } },
+                    select: { courseId: true, amount: true },
+                },
+            },
         })
-        return NextResponse.json(users)
+
+        return NextResponse.json(users.map(({ purchases, ...user }) => ({
+            ...user,
+            courseIds: [...new Set(purchases.map((p) => p.courseId as string))],
+            // Accès effectivement payés : les retirer efface de la recette, l'interface
+            // en avertit avant d'agir.
+            paidCourseIds: [...new Set(
+                purchases.filter((p) => Number(p.amount) > 0).map((p) => p.courseId as string),
+            )],
+        })))
     } catch (error) {
         console.error('Failed to fetch users:', error)
         return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })

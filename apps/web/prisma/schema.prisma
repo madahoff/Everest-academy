@@ -280,6 +280,12 @@ model PremiumPlan {
   ///
   /// NULL = le pack n'est pas proposé hors de Madagascar.
   priceEur  Decimal? @db.Decimal(10, 2)
+  /// Nombre de modules ANNONCÉS sur la durée de l'offre — l'année académique.
+  ///
+  /// À distinguer du nombre de cours publiés, que le catalogue sait compter tout
+  /// seul : le pack se vend sur un programme annoncé, dont une partie seulement est
+  /// parue au moment de l'achat. NULL = on annonce simplement ce qui est publié.
+  announcedCourseCount Int?
   /// Offre retirée de la vente : le catalogue cesse de la proposer, sans que les
   /// accès déjà accordés ne soient repris.
   active    Boolean  @default(true)

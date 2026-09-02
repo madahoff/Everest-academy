@@ -285,8 +285,11 @@ function CoursesListContent({ initialCourses, isPremium, premiumOffer }: Courses
             {/* --- MAIN GRID --- */}
             <div className="max-w-[1600px] mx-auto px-6 lg:px-12 py-12">
                 {filteredCourses.length > 0 ? (
+                    // `auto-rows-fr` : toutes les rangées prennent la même hauteur, et pas
+                    // seulement les cartes d'une même rangée — sans quoi la grille reste
+                    // régulière ligne par ligne mais irrégulière d'une ligne à l'autre.
                     <div className={`grid gap-8 ${viewMode === "grid"
-                        ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                        ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-fr"
                         : "grid-cols-1 gap-4"
                         }`}>
                         {filteredCourses.map((course) => (

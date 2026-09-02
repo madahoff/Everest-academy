@@ -71,21 +71,24 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
         <Badge variant="premium"><Lock className="w-3 h-3" /> Premium</Badge>
     );
 
+    // Deux repères courts et de largeur prévisible, qu'on ne laisse jamais se replier ;
+    // le troisième — le niveau, le plus long — s'élide plutôt que de créer une 2e ligne.
     const meta = (
         <>
             {course.duration && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    <Clock className="w-3 h-3" /> {course.duration}
+                <span className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 whitespace-nowrap">
+                    <Clock className="w-3 h-3 shrink-0" /> {course.duration}
                 </span>
             )}
             {course.sectionCount > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    <Layers className="w-3 h-3" /> {course.sectionCount} module{course.sectionCount > 1 ? "s" : ""}
+                <span className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 whitespace-nowrap">
+                    <Layers className="w-3 h-3 shrink-0" /> {course.sectionCount} module{course.sectionCount > 1 ? "s" : ""}
                 </span>
             )}
             {course.level && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    <Users className="w-3 h-3" /> {LEVEL_LABELS[course.level] ?? course.level}
+                <span className="min-w-0 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    <Users className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{LEVEL_LABELS[course.level] ?? course.level}</span>
                 </span>
             )}
         </>
@@ -158,7 +161,7 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
 
                     <div className="flex-1 p-6 sm:py-8 sm:pr-8 sm:pl-0 flex flex-col">
                         <div className="flex items-start justify-between gap-6 mb-3">
-                            <h3 className="text-xl font-bold text-[#050505] leading-snug group-hover:text-[#2563EB] transition-colors">
+                            <h3 className="text-xl font-bold text-[#050505] leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[#2563EB] transition-colors">
                                 {course.title}
                             </h3>
                             <span className="flex items-center gap-1 shrink-0">
@@ -167,11 +170,11 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
                             </span>
                         </div>
 
-                        <p className="text-gray-500 text-sm font-light leading-relaxed line-clamp-2 mb-5">
+                        <p className="text-gray-500 text-sm font-light leading-relaxed line-clamp-2 min-h-[3.25em] mb-5">
                             {course.description}
                         </p>
 
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-6">{meta}</div>
+                        <div className="flex items-center gap-x-6 mb-6 h-4 overflow-hidden">{meta}</div>
 
                         <div className="mt-auto pt-5 border-t border-gray-100 flex items-center justify-between gap-6">
                             {priceBlock}
@@ -189,7 +192,7 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
             <article className={`group relative bg-white border transition-all duration-500 hover:shadow-2xl flex flex-col h-full cursor-pointer ${hasAccess ? "border-[#2563EB]/40" : "border-gray-200 hover:border-[#001F3F]"}`}>
                 {hasAccess && <span className="absolute left-0 top-0 h-1 w-full bg-[#2563EB] z-10" aria-hidden />}
 
-                <div className="aspect-[16/9]">{thumbnail("h-full")}</div>
+                <div className="aspect-[16/9] shrink-0">{thumbnail("h-full")}</div>
 
                 <div className="p-8 flex flex-col flex-grow">
                     <div className="flex justify-between items-center mb-4">
@@ -200,15 +203,19 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
                         </div>
                     </div>
 
-                    <h3 className="text-xl font-bold text-[#050505] mb-3 leading-snug group-hover:text-[#2563EB] transition-colors">
+                    {/* Hauteurs RÉSERVÉES, pas seulement plafonnées : un titre d'une ligne
+                        occupe la même place qu'un titre de deux, sinon la carte se tasse
+                        et la grille devient irrégulière. 2.75em = 2 lignes en leading-snug,
+                        3.25em = 2 lignes en leading-relaxed. */}
+                    <h3 className="text-xl font-bold text-[#050505] mb-3 leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[#2563EB] transition-colors">
                         {course.title}
                     </h3>
 
-                    <p className="text-gray-500 text-sm mb-5 line-clamp-2 font-light leading-relaxed">
+                    <p className="text-gray-500 text-sm mb-5 line-clamp-2 min-h-[3.25em] font-light leading-relaxed">
                         {course.description}
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-6">{meta}</div>
+                    <div className="flex items-center gap-x-5 mb-6 h-4 overflow-hidden">{meta}</div>
 
                     <div className="mt-auto pt-6 border-t border-gray-100 flex items-center justify-between gap-4">
                         {priceBlock}
