@@ -26,7 +26,6 @@ const ARGUMENTS = [
     { icon: Lock, label: "Tout le catalogue débloqué", detail: "Chaque module premium, immédiatement" },
     { icon: InfinityIcon, label: "Accès à vie", detail: "Aucun abonnement, aucun renouvellement" },
     { icon: Sparkles, label: "Modules à venir inclus", detail: "Les prochaines MasterClass s'ajoutent seules" },
-    { icon: ShieldCheck, label: "Certificats inclus", detail: "Sur l'ensemble des formations suivies" },
 ];
 
 /**
