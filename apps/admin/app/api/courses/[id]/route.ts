@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from "@/lib/require-admin"
+import { courseSales } from "@/lib/course-sales"
 
-// GET /api/courses/:id - Get course with all sections and questions
+// GET /api/courses/:id - Cours complet : sections, questions, inscrits et revenu
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const denied = await requireAdmin()
     if (denied) return denied
@@ -26,7 +27,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             }
         })
         if (!course) return NextResponse.json({ error: 'Course not found' }, { status: 404 })
-        return NextResponse.json(course)
+
+        const [enrollments, sales] = await Promise.all([
+            prisma.purchase.count({ where: { courseId: id } }),
+            courseSales(id),
+        ])
+
+        return NextResponse.json({
+            ...course,
+            enrollments,
+            paidEnrollments: sales.paidEnrollments,
+            freeEnrollments: enrollments - sales.paidEnrollments,
+            revenue: sales.revenue,
+        })
     } catch (error) {
         console.error('Failed to fetch course:', error)
         return NextResponse.json({ error: 'Failed to fetch course' }, { status: 500 })

@@ -13,6 +13,8 @@ import {
     Loader2,
     BookOpen,
     Layers,
+    Users,
+    Wallet,
     Image as ImageIcon
 } from "lucide-react"
 import { CourseFormDialog } from "@/components/dialogs/course-form-dialog"
@@ -31,7 +33,14 @@ interface CourseData {
     level: string
     salesCount: number
     createdAt: string
-    _count?: { sections: number }
+    /** Personnes ayant accès au cours : achats, codes utilisés et inscriptions gratuites. */
+    enrollments: number
+    /** Parmi elles, celles qui ont payé. */
+    paidEnrollments: number
+    freeEnrollments: number
+    /** Somme encaissée sur ce cours. */
+    revenue: number
+    _count?: { sections: number; purchases: number }
 }
 
 // --- COMPOSANTS UI INTERNES ---
@@ -85,6 +94,11 @@ export default function CoursesPage() {
         const numPrice = typeof price === 'string' ? parseFloat(price) : price
         return numPrice === 0 ? 'Gratuit' : `${numPrice.toFixed(2)}  Ar`
     }
+
+    const formatAr = (value: number) => `${Math.round(value).toLocaleString('fr-FR')} Ar`
+
+    const totalEnrollments = courses.reduce((sum, c) => sum + (c.enrollments ?? 0), 0)
+    const totalRevenue = courses.reduce((sum, c) => sum + (c.revenue ?? 0), 0)
 
     return (
         <div className="flex-1 font-sans text-[#050505]">
@@ -184,6 +198,32 @@ export default function CoursesPage() {
                                     {course.description}
                                 </p>
 
+                                {/* Audience et recette du cours */}
+                                <div className="grid grid-cols-2 gap-px bg-gray-100 mb-4">
+                                    <div className="bg-gray-50 p-3">
+                                        <div className="flex items-center gap-1.5 text-gray-400 mb-1">
+                                            <Users className="w-3 h-3" />
+                                            <span className="text-[8px] font-black uppercase tracking-widest">Ont accès</span>
+                                        </div>
+                                        <p className="text-lg font-black tracking-tighter leading-none">{course.enrollments ?? 0}</p>
+                                        <p className="text-[8px] font-bold uppercase tracking-tighter text-gray-400 mt-1">
+                                            {course.paidEnrollments ?? 0} payants · {course.freeEnrollments ?? 0} offerts
+                                        </p>
+                                    </div>
+                                    <div className="bg-[#050505] text-white p-3">
+                                        <div className="flex items-center gap-1.5 text-gray-500 mb-1">
+                                            <Wallet className="w-3 h-3" />
+                                            <span className="text-[8px] font-black uppercase tracking-widest">Encaissé</span>
+                                        </div>
+                                        <p className="text-lg font-black tracking-tighter leading-none text-[#2563EB]">
+                                            {formatAr(course.revenue ?? 0)}
+                                        </p>
+                                        <p className="text-[8px] font-bold uppercase tracking-tighter text-gray-500 mt-1">
+                                            Depuis la création
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                                     <div className="flex items-center gap-4">
                                         <div className="flex items-center gap-1 text-[9px] font-bold text-gray-400">
@@ -245,6 +285,14 @@ export default function CoursesPage() {
                     <p className="text-2xl font-black italic tracking-tighter text-[#2563EB]">
                         {courses.filter(c => c.status === 'ACTIVE').length}
                     </p>
+                </div>
+                <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">Inscrits</p>
+                    <p className="text-2xl font-black italic tracking-tighter">{totalEnrollments}</p>
+                </div>
+                <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">Encaissé (cours)</p>
+                    <p className="text-2xl font-black italic tracking-tighter text-[#2563EB]">{formatAr(totalRevenue)}</p>
                 </div>
             </div>
         </div>

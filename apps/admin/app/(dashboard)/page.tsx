@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
     LayoutDashboard,
@@ -7,11 +8,14 @@ import {
     BookOpen,
     DollarSign,
     TrendingUp,
+    TrendingDown,
     ArrowUpRight,
     MoreHorizontal,
     Loader2,
-    Package
+    Package,
+    Wallet
 } from "lucide-react"
+import { PERIOD_LABELS, REPORTING_PERIODS, type ReportingPeriod } from "@/lib/reporting"
 
 // --- TYPES ---
 interface StatsData {
@@ -29,19 +33,44 @@ interface StatsData {
         total: number
         outOfStock: number
     }
+    revenue: {
+        period: ReportingPeriod
+        /** Période concernée, ex. « Septembre 2026 ». */
+        label: string
+        start: string
+        end: string
+        total: number
+        courses: number
+        products: number
+        /** Nombre d'achats payants sur la période. */
+        sales: number
+        previousTotal: number
+        /** Variation en % face à la période précédente, null si celle-ci était vide. */
+        change: number | null
+    }
 }
+
+const formatAr = (value: number) => `${Math.round(value).toLocaleString("fr-FR")} Ar`
 
 // --- COMPOSANTS UI INTERNES ---
 
-const StatCard = ({ title, value, description, icon: Icon, loading }: any) => (
+const StatCard = ({ title, value, description, icon: Icon, loading, trend }: any) => (
     <div className="bg-white border border-gray-100 p-6 rounded-none relative overflow-hidden group hover:border-[#001F3F] transition-all duration-300">
         <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-gray-50 text-[#001F3F] group-hover:bg-[#2563EB] group-hover:text-white transition-colors duration-300">
                 <Icon className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold text-green-500 flex items-center gap-1 bg-green-50 px-2 py-0.5 tracking-tighter">
-                <TrendingUp className="h-3 w-3" /> LIVE
-            </span>
+            {trend === undefined || trend === null ? (
+                <span className="text-[10px] font-bold text-green-500 flex items-center gap-1 bg-green-50 px-2 py-0.5 tracking-tighter">
+                    <TrendingUp className="h-3 w-3" /> LIVE
+                </span>
+            ) : (
+                <span className={`text-[10px] font-bold flex items-center gap-1 px-2 py-0.5 tracking-tighter ${trend >= 0 ? "text-green-500 bg-green-50" : "text-red-500 bg-red-50"
+                    }`}>
+                    {trend >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {trend >= 0 ? "+" : ""}{trend.toFixed(1)}%
+                </span>
+            )}
         </div>
         <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-1">{title}</p>
@@ -62,15 +91,19 @@ const StatCard = ({ title, value, description, icon: Icon, loading }: any) => (
 // --- COMPOSANT PRINCIPAL ---
 
 export default function DashboardPage() {
+    const [period, setPeriod] = React.useState<ReportingPeriod>("month")
+
     const { data: stats, isLoading, error } = useQuery<StatsData>({
-        queryKey: ["stats"],
+        queryKey: ["stats", period],
         queryFn: async () => {
-            const res = await fetch("/api/stats")
+            const res = await fetch(`/api/stats?period=${period}`)
             if (!res.ok) throw new Error("Failed to fetch stats")
             return res.json()
         },
         refetchInterval: 30000 // Refresh every 30 seconds
     })
+
+    const revenue = stats?.revenue
 
     const statCards = [
         {
@@ -86,10 +119,17 @@ export default function DashboardPage() {
             icon: BookOpen,
         },
         {
-            title: "Ventes Totales",
-            value: stats?.courses?.totalSales?.toLocaleString() || "0",
-            description: "Unités vendues",
+            title: `Revenus · ${PERIOD_LABELS[period]}`,
+            value: formatAr(revenue?.total ?? 0),
+            description: `${revenue?.label ?? "—"} · ${revenue?.sales ?? 0} ventes`,
             icon: DollarSign,
+            trend: revenue?.change ?? null,
+        },
+        {
+            title: "Ventes Cumulées",
+            value: stats?.courses?.totalSales?.toLocaleString() || "0",
+            description: "Unités vendues depuis le début",
+            icon: ArrowUpRight,
         },
         {
             title: "Produits en Stock",
@@ -111,7 +151,24 @@ export default function DashboardPage() {
                         Tableau de <span className="text-gray-300">Bord</span>
                     </h2>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Filtre de période : les revenus affichés portent sur la période
+                        calendaire en cours, qui repart de zéro d'elle-même. */}
+                    <div className="flex border border-gray-200 bg-white">
+                        {REPORTING_PERIODS.map((value) => (
+                            <button
+                                key={value}
+                                onClick={() => setPeriod(value)}
+                                aria-pressed={period === value}
+                                className={`px-4 py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${period === value
+                                    ? "bg-[#050505] text-white"
+                                    : "text-gray-400 hover:text-[#050505]"
+                                    }`}
+                            >
+                                {PERIOD_LABELS[value]}
+                            </button>
+                        ))}
+                    </div>
                     <button className="px-6 py-3 bg-white border border-gray-200 text-[10px] font-bold uppercase tracking-widest hover:border-[#050505] transition-all">
                         Exporter PDF
                     </button>
@@ -129,7 +186,7 @@ export default function DashboardPage() {
             )}
 
             {/* Stats Grid */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {statCards.map((stat) => (
                     <StatCard key={stat.title} {...stat} loading={isLoading} />
                 ))}
@@ -165,6 +222,31 @@ export default function DashboardPage() {
                         <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">
                             {isLoading ? 'Chargement...' : `${stats?.users?.total || 0} utilisateurs enregistrés`}
                         </p>
+                    </div>
+
+                    {/* Recette de la période, décomposée */}
+                    <div className="border border-white/10 p-5 mb-8">
+                        <div className="flex items-center gap-2 text-[#2563EB] mb-3">
+                            <Wallet className="w-4 h-4" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">
+                                Revenus · {revenue?.label ?? PERIOD_LABELS[period]}
+                            </span>
+                        </div>
+                        <p className="text-3xl font-black tracking-tighter">{formatAr(revenue?.total ?? 0)}</p>
+                        <div className="mt-4 space-y-1 text-[10px] font-bold uppercase tracking-widest">
+                            <div className="flex justify-between text-gray-400">
+                                <span>Cours</span>
+                                <span className="text-white">{formatAr(revenue?.courses ?? 0)}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-400">
+                                <span>Boutique</span>
+                                <span className="text-white">{formatAr(revenue?.products ?? 0)}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-500 pt-2 border-t border-white/5">
+                                <span>Période précédente</span>
+                                <span>{formatAr(revenue?.previousTotal ?? 0)}</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="space-y-6">

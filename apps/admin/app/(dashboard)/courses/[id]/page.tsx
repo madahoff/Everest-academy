@@ -18,7 +18,10 @@ import {
     CheckCircle,
     Circle,
     Video,
-    FileText
+    FileText,
+    Users,
+    Wallet,
+    Gift
 } from "lucide-react"
 import { SectionFormDialog } from "@/components/dialogs/section-form-dialog"
 import { QuestionFormDialog } from "@/components/dialogs/question-form-dialog"
@@ -62,6 +65,13 @@ interface Course {
     price: string | number
     status: "ACTIVE" | "DRAFT"
     salesCount: number
+    /** Personnes ayant accès : achats, codes utilisés et inscriptions gratuites. */
+    enrollments: number
+    /** Parmi elles, celles qui ont payé. */
+    paidEnrollments: number
+    freeEnrollments: number
+    /** Somme encaissée sur ce cours. */
+    revenue: number
     sections: Section[]
 }
 
@@ -117,6 +127,8 @@ export default function CourseDetailPage() {
         return numPrice === 0 ? 'Gratuit' : `${numPrice.toFixed(2)}  Ar`
     }
 
+    const formatAr = (value: number) => `${Math.round(value).toLocaleString('fr-FR')} Ar`
+
     if (isLoading) {
         return (
             <div className="flex-1 flex items-center justify-center min-h-screen">
@@ -167,7 +179,7 @@ export default function CourseDetailPage() {
                         <div className="text-right text-white">
                             <p className="text-3xl font-black">{formatPrice(course.price)}</p>
                             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                                {course.salesCount} ventes
+                                {course.enrollments ?? 0} personnes ont accès
                             </p>
                         </div>
                     </div>
@@ -175,6 +187,45 @@ export default function CourseDetailPage() {
             </div>
 
             <div className="max-w-6xl mx-auto px-8 py-10">
+                {/* Audience et recette */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-100 border border-gray-100 mb-12">
+                    <div className="bg-white p-6">
+                        <div className="flex items-center gap-2 text-gray-400 mb-3">
+                            <Users className="w-4 h-4" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Personnes ayant accès</span>
+                        </div>
+                        <p className="text-4xl font-black tracking-tighter leading-none">{course.enrollments ?? 0}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-2">
+                            Achats, codes et inscriptions
+                        </p>
+                    </div>
+                    <div className="bg-white p-6">
+                        <div className="flex items-center gap-2 text-gray-400 mb-3">
+                            <Gift className="w-4 h-4" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Payants / offerts</span>
+                        </div>
+                        <p className="text-4xl font-black tracking-tighter leading-none">
+                            {course.paidEnrollments ?? 0}
+                            <span className="text-gray-300"> / {course.freeEnrollments ?? 0}</span>
+                        </p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-2">
+                            Un accès offert ne rapporte rien
+                        </p>
+                    </div>
+                    <div className="bg-[#050505] text-white p-6">
+                        <div className="flex items-center gap-2 text-gray-500 mb-3">
+                            <Wallet className="w-4 h-4" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Revenu généré</span>
+                        </div>
+                        <p className="text-4xl font-black tracking-tighter leading-none text-[#2563EB]">
+                            {formatAr(course.revenue ?? 0)}
+                        </p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mt-2">
+                            Total encaissé sur ce cours
+                        </p>
+                    </div>
+                </div>
+
                 {/* Course Info */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mb-12">
                     <div className="lg:col-span-2">

@@ -1,20 +1,40 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from "@/lib/require-admin"
+import { courseSalesByCourse } from "@/lib/course-sales"
 
-// GET /api/courses - List all courses with sections count
+// GET /api/courses - Liste des cours, avec sections, inscrits et revenu généré
 export async function GET() {
     const denied = await requireAdmin()
     if (denied) return denied
 
     try {
-        const courses = await prisma.course.findMany({
-            orderBy: { createdAt: 'desc' },
-            include: {
-                _count: { select: { sections: true } }
+        const [courses, salesByCourse] = await Promise.all([
+            prisma.course.findMany({
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    // `purchases` compte les personnes ayant accès : une ligne par
+                    // utilisateur et par cours, qu'il ait payé, utilisé un code ou
+                    // rejoint un cours gratuit.
+                    _count: { select: { sections: true, purchases: true } }
+                }
+            }),
+            courseSalesByCourse(),
+        ])
+
+        return NextResponse.json(courses.map((course) => {
+            const sales = salesByCourse.get(course.id)
+            const enrollments = course._count.purchases
+            const paidEnrollments = sales?.paidEnrollments ?? 0
+
+            return {
+                ...course,
+                enrollments,
+                paidEnrollments,
+                freeEnrollments: enrollments - paidEnrollments,
+                revenue: sales?.revenue ?? 0,
             }
-        })
-        return NextResponse.json(courses)
+        }))
     } catch (error) {
         console.error('Failed to fetch courses:', error)
         return NextResponse.json({ error: 'Failed to fetch courses' }, { status: 500 })
