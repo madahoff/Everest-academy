@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
-import { buildCourseItems, createAndPayOrder, orderPayload } from "@/lib/wallet";
+import { buildPremiumPackItem, createAndPayOrder, orderPayload } from "@/lib/wallet";
+import { getPremiumOffer, isPremiumMember } from "@/lib/premium";
 import { paymentErrorResponse } from "@/lib/api-errors";
 import { defaultMethodFor } from "@/lib/pricing";
 import { getRequestCurrency } from "@/lib/request-currency";
@@ -12,17 +13,28 @@ export const dynamic = "force-dynamic";
 
 const METHODS: PaymentMethod[] = ["WALLET", "MOBILE_MONEY", "CARD"];
 
+/** GET /api/premium — offre du Pack Premium et état de l'abonné. */
+export async function GET() {
+    const session = await getServerSession(authOptions);
+    const offer = await getPremiumOffer(await getRequestCurrency());
+
+    return NextResponse.json({
+        ...offer,
+        isPremium: await isPremiumMember(session?.user?.id),
+    });
+}
+
 /**
- * POST /api/courses/:courseId/purchase — achat immédiat d'un cours, sans passer par
- * le panier ni par un code d'accès.
+ * POST /api/premium — achat du Pack Premium, qui débloque l'intégralité du catalogue.
+ *
+ * Même mécanique que l'achat d'un cours : le solde règle immédiatement, Mobile Money
+ * et carte ouvrent un paiement dont l'issue est ensuite sondée sur /api/orders/:id.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ courseId: string }> }) {
+export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "unauthorized", message: "Connexion requise" }, { status: 401 });
     }
-
-    const { courseId } = await params;
 
     let body: { method?: unknown; returnPath?: unknown } = {};
     try {
@@ -31,20 +43,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ cou
         // Corps optionnel.
     }
 
-    // La devise vient du PAYS du visiteur, jamais du corps de la requête : elle
-    // détermine le montant réellement facturé.
     const currency = await getRequestCurrency();
     const method = (METHODS.includes(body.method as PaymentMethod) ? body.method : defaultMethodFor(currency)) as PaymentMethod;
 
     try {
-        const items = await buildCourseItems(session.user.id, [courseId], currency);
+        const items = await buildPremiumPackItem(session.user.id, currency);
         const result = await createAndPayOrder({
             userId: session.user.id,
             items,
             method,
             currency,
-            returnPath: typeof body.returnPath === "string" ? body.returnPath : `/courses/${courseId}`,
-            label: items[0].title,
+            returnPath: typeof body.returnPath === "string" ? body.returnPath : "/courses",
+            label: "Pack Premium",
         });
 
         return NextResponse.json({

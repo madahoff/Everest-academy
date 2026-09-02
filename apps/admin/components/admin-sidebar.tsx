@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
     BookOpen,
+    Crown,
     LayoutDashboard,
     Package,
     Settings,
@@ -32,8 +33,9 @@ const menuItems = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard, code: "DB-01" },
     { title: "Catalogue Cours", url: "/courses", icon: BookOpen, code: "ED-02" },
     { title: "Inventaire Store", url: "/products", icon: Package, code: "SH-03" },
-    { title: "Base Utilisateurs", url: "/users", icon: Users, code: "US-04" },
-    { title: "Import Données", url: "/import", icon: FileSpreadsheet, code: "IM-05" },
+    { title: "Offre Premium", url: "/premium", icon: Crown, code: "PR-04" },
+    { title: "Base Utilisateurs", url: "/users", icon: Users, code: "US-05" },
+    { title: "Import Données", url: "/import", icon: FileSpreadsheet, code: "IM-06" },
 ]
 
 export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

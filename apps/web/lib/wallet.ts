@@ -11,9 +11,11 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { PREMIUM_PACK_TITLE, getPremiumPlan } from "@/lib/premium";
+import { UNAVAILABLE_ABROAD, methodsFor, resolvePrice, type Currency } from "@/lib/pricing";
 import * as walletApi from "@/lib/wallet-api";
 import { WalletApiError, fromMinorUnits, toMinorUnits, walletRefForEmail } from "@/lib/wallet-api";
-import type { Order, OrderItem, PaymentMethod } from "@prisma/client";
+import type { Order, OrderItem, PaymentMethod, Prisma } from "@prisma/client";
 
 /** Erreur métier Everest (distincte d'une erreur du service de paiement). */
 export class CheckoutError extends Error {
@@ -27,8 +29,34 @@ export class CheckoutError extends Error {
     }
 }
 
-/** Devise unique du catalogue Everest. */
-const CURRENCY = "MGA" as const;
+/**
+ * Devise du PORTEFEUILLE, et elle seule. Un portefeuille Everest est tenu en ariary,
+ * quel que soit le pays de son titulaire : il est alimenté par Mobile Money malgache
+ * et partagé avec Viktoo.
+ *
+ * La devise d'une COMMANDE, elle, dépend du pays du visiteur (voir `lib/pricing.ts`)
+ * et voyage explicitement jusqu'ici — d'où le paramètre `currency` porté par chaque
+ * constructeur d'articles. Les deux ne se confondent pas : c'est précisément parce
+ * que le portefeuille est en ariary qu'il ne peut pas régler une commande en euros.
+ */
+const WALLET_CURRENCY = "MGA" as const;
+
+/**
+ * Le règlement au solde et le Mobile Money sont des chemins malgaches : le premier
+ * puise dans un portefeuille en ariary, le second dans MVola / Orange / Airtel.
+ * Une commande en euros ne peut donc être réglée que par carte.
+ */
+function assertMethodAllowed(currency: Currency, method: PaymentMethod): void {
+    if (methodsFor(currency).includes(method)) return;
+
+    throw new CheckoutError(
+        "method_unavailable",
+        400,
+        method === "WALLET"
+            ? "Votre portefeuille est tenu en ariary : il ne peut pas régler une commande en euros. Réglez par carte bancaire."
+            : "Le Mobile Money n'est disponible que depuis Madagascar. Réglez par carte bancaire.",
+    );
+}
 
 /**
  * URL publique du site, pour construire les URL de retour de paiement.
@@ -95,7 +123,7 @@ export async function ensureUserWallet(userId: string): Promise<{ wallet: wallet
 
     const { wallet } = await walletApi.createWallet({
         externalId: walletApi.normalizeEmailExternalId(user.email),
-        currency: CURRENCY,
+        currency: WALLET_CURRENCY,
         holderName: user.name || undefined,
         metadata: { app: "everest-academy" },
     });
@@ -147,6 +175,8 @@ export async function getWalletSummary(userId: string): Promise<WalletSummary> {
 export interface OrderDraftItem {
     courseId?: string;
     productId?: string;
+    /** Ligne « Pack Premium » : ouvre tout le catalogue, ne vise aucun article. */
+    isPremiumPack?: boolean;
     title: string;
     amount: number;
 }
@@ -157,11 +187,23 @@ export type OrderWithItems = Order & { items: OrderItem[] };
  * Construit la commande à partir des cours demandés, en refusant ceux auxquels
  * l'utilisateur a déjà accès — payer deux fois le même cours est toujours une erreur,
  * jamais une intention.
+ *
+ * `currency` est la devise du VISITEUR, résolue côté serveur depuis son pays. Elle
+ * décide lequel des deux tarifs du cours fait foi ; elle n'est jamais lue dans le
+ * corps de la requête, faute de quoi un acheteur choisirait son prix.
  */
-export async function buildCourseItems(userId: string, courseIds: string[]): Promise<OrderDraftItem[]> {
+export async function buildCourseItems(
+    userId: string,
+    courseIds: string[],
+    currency: Currency,
+): Promise<OrderDraftItem[]> {
+    if (await hasPremiumPlan(userId)) {
+        throw new CheckoutError("already_owned", 409, "Votre Pack Premium vous donne déjà accès à ce cours");
+    }
+
     const courses = await prisma.course.findMany({
         where: { id: { in: courseIds } },
-        select: { id: true, title: true, price: true },
+        select: { id: true, title: true, price: true, priceEur: true },
     });
 
     if (courses.length !== courseIds.length) {
@@ -179,18 +221,56 @@ export async function buildCourseItems(userId: string, courseIds: string[]): Pro
         if (ownedIds.has(course.id)) {
             throw new CheckoutError("already_owned", 409, `Vous avez déjà accès à « ${course.title} »`);
         }
-        const price = Number(course.price);
-        if (price <= 0) {
+
+        const view = resolvePrice({ price: String(course.price), priceEur: course.priceEur?.toString() }, currency);
+
+        if (view.free) {
             throw new CheckoutError("free_course", 400, "Ce cours est gratuit : utilisez l'inscription directe");
         }
-        items.push({ courseId: course.id, title: course.title, amount: price });
+        // Tarif jamais saisi dans cette devise : le cours n'est pas en vente ici. Le
+        // catalogue le dit déjà, cette garde couvre l'appel direct à l'API.
+        if (view.amount === null) {
+            throw new CheckoutError("price_unavailable", 409, UNAVAILABLE_ABROAD);
+        }
+
+        items.push({ courseId: course.id, title: course.title, amount: view.amount });
     }
 
     return items;
 }
 
+async function hasPremiumPlan(userId: string): Promise<boolean> {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+    return user?.plan === "PREMIUM";
+}
+
+/**
+ * Construit la commande d'un Pack Premium. Le prix vient de la configuration serveur,
+ * jamais du client — c'est la seule ligne de commande dont le montant n'est adossé à
+ * aucune ligne du catalogue.
+ */
+export async function buildPremiumPackItem(userId: string, currency: Currency): Promise<OrderDraftItem[]> {
+    if (await hasPremiumPlan(userId)) {
+        throw new CheckoutError("already_premium", 409, "Vous disposez déjà du Pack Premium");
+    }
+
+    const plan = await getPremiumPlan();
+    if (!plan.active) {
+        throw new CheckoutError("premium_unavailable", 409, "Le Pack Premium n'est pas proposé pour le moment");
+    }
+
+    const amount = currency === "EUR" ? plan.priceEur : plan.price;
+    if (amount === null || amount <= 0) {
+        throw new CheckoutError("price_unavailable", 409, UNAVAILABLE_ABROAD);
+    }
+
+    return [{ isPremiumPack: true, title: PREMIUM_PACK_TITLE, amount }];
+}
+
 /** Items du panier en base — source de vérité des prix, jamais ceux envoyés par le client. */
-export async function buildCartItems(userId: string): Promise<OrderDraftItem[]> {
+export async function buildCartItems(userId: string, currency: Currency): Promise<OrderDraftItem[]> {
+    const isPremium = await hasPremiumPlan(userId);
+
     const cartItems = await prisma.cartItem.findMany({
         where: { userId },
         include: { course: true, product: true },
@@ -210,17 +290,49 @@ export async function buildCartItems(userId: string): Promise<OrderDraftItem[]> 
     const items: OrderDraftItem[] = [];
     for (const item of cartItems) {
         if (item.course) {
-            // Un cours déjà acquis (offert entre-temps, code d'accès utilisé) est retiré
-            // silencieusement du panier plutôt que de bloquer tout le règlement.
-            if (ownedIds.has(item.course.id)) continue;
-            items.push({ courseId: item.course.id, title: item.course.title, amount: Number(item.course.price) });
+            // Un cours déjà acquis (offert entre-temps, code d'accès utilisé, Pack Premium)
+            // est retiré silencieusement du panier plutôt que de bloquer tout le règlement.
+            if (isPremium || ownedIds.has(item.course.id)) continue;
+
+            const view = resolvePrice(
+                { price: String(item.course.price), priceEur: item.course.priceEur?.toString() },
+                currency,
+            );
+            // Un article sans tarif dans la devise du payeur bloque, lui, tout le
+            // règlement : le retirer en silence ferait payer un panier amputé sans
+            // que l'acheteur l'ait décidé.
+            if (view.amount === null) {
+                throw new CheckoutError(
+                    "price_unavailable",
+                    409,
+                    `« ${item.course.title} » n'est pas proposé à l'achat depuis votre pays. Retirez-le du panier pour continuer.`,
+                );
+            }
+            items.push({ courseId: item.course.id, title: item.course.title, amount: view.amount });
         } else if (item.product) {
-            items.push({ productId: item.product.id, title: item.product.name, amount: Number(item.product.price) });
+            const view = resolvePrice(
+                { price: String(item.product.price), priceEur: item.product.priceEur?.toString() },
+                currency,
+            );
+            if (view.amount === null) {
+                throw new CheckoutError(
+                    "price_unavailable",
+                    409,
+                    `« ${item.product.name} » n'est pas proposé à l'achat depuis votre pays. Retirez-le du panier pour continuer.`,
+                );
+            }
+            items.push({ productId: item.product.id, title: item.product.name, amount: view.amount });
         }
     }
 
     if (items.length === 0) {
-        throw new CheckoutError("already_owned", 409, "Vous avez déjà accès à tous les articles du panier");
+        throw new CheckoutError(
+            "already_owned",
+            409,
+            isPremium
+                ? "Votre Pack Premium couvre déjà tous les cours de votre panier"
+                : "Vous avez déjà accès à tous les articles du panier",
+        );
     }
 
     return items;
@@ -240,30 +352,39 @@ export interface PayOrderResult {
  * WALLET : le débit est synchrone et l'accès est accordé dans la foulée.
  * MOBILE_MONEY / CARD : un paiement Vanilla Pay est ouvert et la commande reste
  * PENDING jusqu'à ce qu'un sondage de statut la confirme.
+ *
+ * `currency` est celle des articles, déjà résolue par leur constructeur. Elle est
+ * écrite sur la commande — qui garde ainsi la trace de ce qui a réellement été
+ * facturé, même si le tarif ou le pays du client changent ensuite.
  */
 export async function createAndPayOrder(input: {
     userId: string;
     items: OrderDraftItem[];
     method: PaymentMethod;
+    currency: Currency;
     returnPath?: string | null;
     label?: string;
 }): Promise<PayOrderResult> {
-    const { userId, items, method } = input;
+    const { userId, items, method, currency } = input;
+
+    assertMethodAllowed(currency, method);
 
     const total = items.reduce((sum, item) => sum + item.amount, 0);
-    const minorTotal = toMinorUnits(total); // lève si le montant n'est pas un entier d'ariary
+    // Lève si le montant n'est pas entier — ni centime d'ariary, ni centime d'euro.
+    const minorTotal = toMinorUnits(total, currency);
 
     const order = await prisma.order.create({
         data: {
             userId,
             amount: total,
-            currency: CURRENCY,
+            currency,
             method,
             status: "PENDING",
             items: {
                 create: items.map((item) => ({
                     courseId: item.courseId ?? null,
                     productId: item.productId ?? null,
+                    isPremiumPack: item.isPremiumPack ?? false,
                     title: item.title,
                     amount: item.amount,
                 })),
@@ -324,7 +445,7 @@ export async function createAndPayOrder(input: {
             {
                 purpose: "DIRECT",
                 amount: minorTotal,
-                currency: CURRENCY,
+                currency,
                 mode: modeFor(method),
                 externalReference: order.id,
                 label: vpiLabel(input.label ?? "Formation Everest"),
@@ -373,7 +494,9 @@ export async function grantOrderAccess(orderId: string): Promise<OrderWithItems>
 
         await prisma.$transaction(async (tx) => {
             for (const item of order.items) {
-                if (item.courseId) {
+                if (item.isPremiumPack) {
+                    await grantPremiumPack(tx, order.userId);
+                } else if (item.courseId) {
                     const existing = await tx.purchase.findFirst({
                         where: { userId: order.userId, courseId: item.courseId },
                     });
@@ -412,6 +535,43 @@ export async function grantOrderAccess(orderId: string): Promise<OrderWithItems>
         await prisma.order.updateMany({ where: { id: orderId }, data: { grantedAt: null } });
         throw error;
     }
+}
+
+/**
+ * Ouvre le catalogue à un acheteur du Pack Premium.
+ *
+ * Le plan seul suffirait à autoriser la lecture, mais tout le produit interroge déjà
+ * les `Purchase` — « mes cours » du profil, les certifications, le panier. On matérialise
+ * donc l'existant, et le plan prend le relais pour les cours publiés ensuite.
+ *
+ * `salesCount` n'est pas incrémenté : ce compteur mesure les ventes d'un cours, et le
+ * pack n'en est pas une.
+ */
+async function grantPremiumPack(
+    tx: Prisma.TransactionClient,
+    userId: string,
+): Promise<void> {
+    await tx.user.update({
+        where: { id: userId },
+        data: { plan: "PREMIUM", premiumSince: new Date() },
+    });
+
+    const [courses, owned] = await Promise.all([
+        tx.course.findMany({ where: { status: "ACTIVE" }, select: { id: true } }),
+        tx.purchase.findMany({ where: { userId, courseId: { not: null } }, select: { courseId: true } }),
+    ]);
+
+    const ownedIds = new Set(owned.map((p) => p.courseId));
+    const missing = courses.filter((course) => !ownedIds.has(course.id));
+
+    if (missing.length > 0) {
+        await tx.purchase.createMany({
+            data: missing.map((course) => ({ userId, courseId: course.id, amount: 0 })),
+        });
+    }
+
+    // Plus rien à régler à l'unité : le panier n'aurait plus de sens.
+    await tx.cartItem.deleteMany({ where: { userId, courseId: { not: null } } });
 }
 
 async function loadOrder(orderId: string): Promise<OrderWithItems> {
@@ -479,7 +639,9 @@ export async function createTopup(input: {
         throw new CheckoutError("invalid_method", 400, "Une recharge ne peut pas être payée par le solde");
     }
 
-    const minorAmount = toMinorUnits(input.amount);
+    // Une recharge crédite le portefeuille, tenu en ariary : elle l'est donc aussi,
+    // quel que soit le pays depuis lequel elle est faite.
+    const minorAmount = toMinorUnits(input.amount, WALLET_CURRENCY);
     const { ref } = await ensureUserWallet(input.userId);
 
     const payment = await walletApi.createPayment(
@@ -487,7 +649,7 @@ export async function createTopup(input: {
             purpose: "TOPUP",
             walletRef: ref,
             amount: minorAmount,
-            currency: CURRENCY,
+            currency: WALLET_CURRENCY,
             mode: modeFor(input.method),
             label: vpiLabel("Recharge Everest"),
             returnUrl: absoluteReturnUrl(input.returnPath ?? "/wallet"),
@@ -504,7 +666,7 @@ export async function createTopup(input: {
             userId: input.userId,
             reference: payment.reference,
             amount: input.amount,
-            currency: CURRENCY,
+            currency: WALLET_CURRENCY,
             method: input.method,
             status: payment.status,
             settled: payment.settled,
@@ -563,6 +725,8 @@ export interface OrderPayload {
     paymentUrl: string | null;
     failureReason: string | null;
     granted: boolean;
+    /** Commande de Pack Premium : tout le catalogue est ouvert, aucun cours à cibler. */
+    premium: boolean;
     items: { courseId: string | null; productId: string | null; title: string; amount: number }[];
     /** Première section du premier cours acheté : où emmener l'apprenant après paiement. */
     firstCourseId: string | null;
@@ -592,6 +756,7 @@ export async function orderPayload(order: OrderWithItems): Promise<OrderPayload>
         paymentUrl: order.paymentUrl,
         failureReason: order.failureReason,
         granted: order.grantedAt !== null,
+        premium: order.items.some((item) => item.isPremiumPack),
         items: order.items.map((item) => ({
             courseId: item.courseId,
             productId: item.productId,

@@ -1,18 +1,17 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import {
     Search,
     BookOpen,
-    Filter,
     X,
     LayoutGrid,
     List as ListIcon,
     ArrowUpDown
 } from "lucide-react";
 import { StyledCourseCard } from "@/components/styled-course-card"; // Votre composant existant
+import PremiumPackBanner, { type PremiumOffer } from "@/components/premium-pack-banner";
 
 // --- UI COMPONENTS INTERNES (Style Cohérent) ---
 
@@ -36,24 +35,29 @@ const Button = ({ children, variant = "primary", className = "", onClick, ...pro
     );
 };
 
+interface CoursesListProps {
+    initialCourses: any[];
+    isPremium: boolean;
+    premiumOffer: PremiumOffer;
+}
+
 // --- COMPOSANT PRINCIPAL ---
 
-export default function CoursesList({ initialCourses }: { initialCourses: any[] }) {
+export default function CoursesList(props: CoursesListProps) {
     return (
         <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB]" />}>
-            <CoursesListContent initialCourses={initialCourses} />
+            <CoursesListContent {...props} />
         </Suspense>
     );
 }
 
-function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
+function CoursesListContent({ initialCourses, isPremium, premiumOffer }: CoursesListProps) {
     const searchParams = useSearchParams();
 
     // --- STATE MANAGEMENT ---
-    const [courses, setCourses] = useState(initialCourses);
-    const [filteredCourses, setFilteredCourses] = useState(initialCourses);
+    const [courses] = useState(initialCourses);
     const [searchQuery, setSearchQuery] = useState("");
-    const [filterType, setFilterType] = useState("all"); // 'all', 'free', 'premium'
+    const [filterType, setFilterType] = useState("all"); // 'all', 'unlocked', 'free', 'premium'
     const [sortBy, setSortBy] = useState("newest"); // 'newest', 'popular', 'price_asc', 'price_desc'
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
@@ -65,8 +69,16 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
         if (search) setSearchQuery(search);
     }, [searchParams]);
 
+    // --- STATS CALCULATION ---
+    const stats = useMemo(() => ({
+        total: courses.length,
+        free: courses.filter(c => parseFloat(c.price) === 0).length,
+        premium: courses.filter(c => parseFloat(c.price) > 0).length,
+        unlocked: courses.filter(c => c.hasAccess).length,
+    }), [courses]);
+
     // --- FILTERING LOGIC ---
-    useEffect(() => {
+    const filteredCourses = useMemo(() => {
         let result = [...courses];
 
         // 1. Search
@@ -83,6 +95,8 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
             result = result.filter(c => parseFloat(c.price) === 0);
         } else if (filterType === "premium") {
             result = result.filter(c => parseFloat(c.price) > 0);
+        } else if (filterType === "unlocked") {
+            result = result.filter(c => c.hasAccess);
         }
 
         // 3. Sorting
@@ -101,8 +115,14 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                 break;
         }
 
-        setFilteredCourses(result);
-    }, [courses, searchQuery, filterType, sortBy]);
+        // 4. Les cours déjà accessibles remontent : ce qu'on possède se consulte plus
+        // souvent que ce qu'on hésite encore à acheter.
+        if (filterType === "all" && stats.unlocked > 0) {
+            result.sort((a, b) => Number(Boolean(b.hasAccess)) - Number(Boolean(a.hasAccess)));
+        }
+
+        return result;
+    }, [courses, searchQuery, filterType, sortBy, stats.unlocked]);
 
     const handleReset = () => {
         setSearchQuery("");
@@ -110,13 +130,12 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
         setSortBy("newest");
     };
 
-    // --- STATS CALCULATION ---
-    const stats = {
-        total: courses.length,
-        free: courses.filter(c => parseFloat(c.price) === 0).length,
-        premium: courses.filter(c => parseFloat(c.price) > 0).length,
-        hours: courses.reduce((acc, curr) => acc + (curr.duration || 0), 0) // Hypothetical duration
-    };
+    const filters: { id: string; label: string; count?: number }[] = [
+        { id: "all", label: "Tous", count: stats.total },
+        ...(stats.unlocked > 0 ? [{ id: "unlocked", label: "Mes cours", count: stats.unlocked }] : []),
+        { id: "free", label: "Gratuit", count: stats.free },
+        { id: "premium", label: "Premium", count: stats.premium },
+    ];
 
     return (
         <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white pb-24">
@@ -151,8 +170,12 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                                     <div className="text-3xl font-light text-[#001F3F]">{stats.total}</div>
                                 </div>
                                 <div>
-                                    <div className="text-xs uppercase tracking-widest text-gray-400 mb-1">Open Source</div>
-                                    <div className="text-3xl font-light text-[#2563EB]">{stats.free}</div>
+                                    <div className="text-xs uppercase tracking-widest text-gray-400 mb-1">
+                                        {stats.unlocked > 0 ? "Mes accès" : "Open Source"}
+                                    </div>
+                                    <div className="text-3xl font-light text-[#2563EB]">
+                                        {stats.unlocked > 0 ? stats.unlocked : stats.free}
+                                    </div>
                                 </div>
                                 <div className="col-span-2 border-t border-gray-200 pt-4 flex justify-between items-center">
                                     <span className="text-xs uppercase tracking-widest text-gray-400">Cursus Premium</span>
@@ -163,6 +186,13 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                     </div>
                 </div>
             </div>
+
+            {/* --- PACK PREMIUM : L'OFFRE QUI OUVRE TOUT LE CATALOGUE --- */}
+            <PremiumPackBanner
+                offer={premiumOffer}
+                isPremium={isPremium}
+                unlockedCount={stats.unlocked}
+            />
 
             {/* --- TOOLBAR: STICKY FILTERS --- */}
             <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 py-4 shadow-sm">
@@ -181,24 +211,20 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                         </div>
 
                         <div className="flex items-center gap-4 border-l border-gray-200 pl-6 h-8">
-                            <button
-                                onClick={() => setFilterType("all")}
-                                className={`text-xs font-bold uppercase tracking-widest transition-colors ${filterType === 'all' ? 'text-[#001F3F]' : 'text-gray-400 hover:text-gray-600'}`}
-                            >
-                                Tous
-                            </button>
-                            <button
-                                onClick={() => setFilterType("free")}
-                                className={`text-xs font-bold uppercase tracking-widest transition-colors ${filterType === 'free' ? 'text-[#001F3F]' : 'text-gray-400 hover:text-gray-600'}`}
-                            >
-                                Gratuit
-                            </button>
-                            <button
-                                onClick={() => setFilterType("premium")}
-                                className={`text-xs font-bold uppercase tracking-widest transition-colors ${filterType === 'premium' ? 'text-[#001F3F]' : 'text-gray-400 hover:text-gray-600'}`}
-                            >
-                                Premium
-                            </button>
+                            {filters.map((filter) => (
+                                <button
+                                    key={filter.id}
+                                    onClick={() => setFilterType(filter.id)}
+                                    className={`text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1.5 ${filterType === filter.id ? 'text-[#001F3F]' : 'text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    {filter.label}
+                                    {filter.count !== undefined && (
+                                        <span className={`text-[9px] px-1.5 py-0.5 ${filterType === filter.id ? 'bg-[#001F3F] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                            {filter.count}
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
@@ -227,12 +253,14 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                         <div className="flex border border-gray-200 bg-white">
                             <button
                                 onClick={() => setViewMode("grid")}
+                                aria-label="Affichage grille"
                                 className={`p-2 transition-colors ${viewMode === "grid" ? "bg-[#001F3F] text-white" : "text-gray-400 hover:text-[#001F3F]"}`}
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </button>
                             <button
                                 onClick={() => setViewMode("list")}
+                                aria-label="Affichage liste"
                                 className={`p-2 transition-colors ${viewMode === "list" ? "bg-[#001F3F] text-white" : "text-gray-400 hover:text-[#001F3F]"}`}
                             >
                                 <ListIcon className="w-4 h-4" />
@@ -247,25 +275,10 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                 {filteredCourses.length > 0 ? (
                     <div className={`grid gap-8 ${viewMode === "grid"
                         ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                        : "grid-cols-1"
+                        : "grid-cols-1 gap-4"
                         }`}>
                         {filteredCourses.map((course) => (
-                            <div key={course.id} className={viewMode === "list" ? "flex gap-6 border border-gray-100 p-4 bg-white items-center" : ""}>
-                                {/* En mode liste, on pourrait adapter l'affichage ici, mais pour l'instant on utilise la Card Standard */}
-                                <StyledCourseCard
-                                    course={course}
-                                // Si vous voulez passer une prop pour le mode liste au composant enfant : variant={viewMode}
-                                />
-                                {viewMode === "list" && (
-                                    <div className="hidden md:block flex-1 pl-4 border-l border-gray-100 ml-4">
-                                        <p className="text-sm text-gray-500 line-clamp-2">{course.description}</p>
-                                        <div className="mt-4 flex gap-4">
-                                            <span className="text-xs font-bold bg-gray-100 px-2 py-1 uppercase">{course.duration || "4h 30m"}</span>
-                                            <span className="text-xs font-bold bg-gray-100 px-2 py-1 uppercase">{course.level || "Intermédiaire"}</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            <StyledCourseCard key={course.id} course={course} variant={viewMode} />
                         ))}
                     </div>
                 ) : (
@@ -276,7 +289,9 @@ function CoursesListContent({ initialCourses }: { initialCourses: any[] }) {
                         </div>
                         <h3 className="text-xl font-bold text-[#050505] mb-2 uppercase tracking-wide">Aucun résultat</h3>
                         <p className="text-gray-500 max-w-md mb-8 font-light">
-                            Nous n'avons trouvé aucun module correspondant à "{searchQuery}" avec les filtres actuels.
+                            {searchQuery
+                                ? `Nous n'avons trouvé aucun module correspondant à "${searchQuery}" avec les filtres actuels.`
+                                : "Aucun module ne correspond aux filtres actuels."}
                         </p>
                         <Button variant="outline" onClick={handleReset}>
                             Réinitialiser le catalogue

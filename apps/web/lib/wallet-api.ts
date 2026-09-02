@@ -200,12 +200,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 // ─── Conversion des montants ──────────────────────────────────────────────────
 
 /**
- * Convertit un prix Everest (Decimal Ar, éventuellement « 25000.00 ») vers l'entier
- * attendu par le Wallet API. Les prix sont exprimés en ariary, devise sans
- * subdivision : un centime d'ariary n'existe pas, on refuse donc plutôt que
- * d'arrondir en silence une fraction significative.
+ * Convertit un prix Everest (Decimal, éventuellement « 25000.00 ») vers l'entier
+ * attendu par le Wallet API.
+ *
+ * Les deux devises exigent un ENTIER, pour des raisons distinctes :
+ *  - l'ariary n'a pas de subdivision en usage — un centime d'ariary n'existe pas ;
+ *  - l'euro en a une, mais elle ne survit pas au trajet : le Wallet API transmet le
+ *    montant TEL QUEL à Vanilla Pay avec `devise: EUR`, et applique son taux EUR→MGA
+ *    sur ce même nombre. Un montant exprimé en centimes y serait lu comme des euros,
+ *    soit un facteur 100. Les tarifs en euros sont donc des euros entiers.
+ *
+ * Dans les deux cas on refuse, plutôt que d'arrondir en silence une fraction
+ * significative — un tarif à virgule est une erreur de saisie, pas une intention.
  */
-export function toMinorUnits(value: string | number): number {
+export function toMinorUnits(value: string | number, currency: WalletCurrency = "MGA"): number {
     const amount = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(amount)) {
         throw new WalletApiError("validation_error", 400, `Montant invalide : ${value}`);
@@ -215,7 +223,9 @@ export function toMinorUnits(value: string | number): number {
         throw new WalletApiError(
             "validation_error",
             400,
-            `Montant non entier en ariary : ${value}. L'ariary n'a pas de subdivision.`,
+            currency === "EUR"
+                ? `Montant non entier en euros : ${value}. Le service de paiement ne transporte pas les centimes.`
+                : `Montant non entier en ariary : ${value}. L'ariary n'a pas de subdivision.`,
         );
     }
     if (rounded <= 0) {

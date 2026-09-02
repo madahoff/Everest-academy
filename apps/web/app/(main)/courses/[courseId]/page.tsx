@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth.config";
+import { hasCourseAccess } from "@/lib/premium";
 
 // Force dynamic rendering to avoid database access at build time
 export const dynamic = 'force-dynamic';
@@ -77,13 +78,8 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
     let isFavorited = false;
 
     if (session?.user?.id) {
-        const purchase = await prisma.purchase.findFirst({
-            where: {
-                userId: session.user.id,
-                courseId: courseId
-            }
-        });
-        if (purchase) isPurchased = true;
+        // Achat unitaire, Pack Premium ou rôle administrateur : un seul verdict d'accès.
+        isPurchased = await hasCourseAccess(session.user.id, courseId);
 
         const favorite = await prisma.favorite.findUnique({
             where: {
@@ -94,8 +90,6 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
             }
         });
         if (favorite) isFavorited = true;
-
-        if (session.user.role === 'ADMIN') isPurchased = true;
     }
 
     return (
