@@ -4,8 +4,12 @@ import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { auth } from "@/auth"
 import { existsSync } from "fs"
+import { requireAdmin } from "@/lib/require-admin"
 
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const session = await auth()
 

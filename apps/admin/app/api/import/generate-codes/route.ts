@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requireAdmin } from "@/lib/require-admin"
 
 function generateAccessCode(): string {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -16,6 +17,9 @@ function generateAccessCode(): string {
 }
 
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const session = await auth()
     if (!session || session.user.role !== "ADMIN") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

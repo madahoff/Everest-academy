@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAdmin } from "@/lib/require-admin"
 
 // GET /api/courses - List all courses with sections count
 export async function GET() {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const courses = await prisma.course.findMany({
             orderBy: { createdAt: 'desc' },
@@ -19,6 +23,9 @@ export async function GET() {
 
 // POST /api/courses - Create new course (all fields required)
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const body = await request.json()
         const { title, description, heroImage, cardImage, welcomeVideo, price, status } = body

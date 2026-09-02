@@ -2,10 +2,14 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import Papa from "papaparse"
 import * as XLSX from "xlsx"
+import { requireAdmin } from "@/lib/require-admin"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const session = await auth()
     if (!session || session.user.role !== "ADMIN") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

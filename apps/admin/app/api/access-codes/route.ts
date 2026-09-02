@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
+import { requireAdmin } from "@/lib/require-admin"
 
 // Helper function to generate a unique access code
 function generateAccessCode(): string {
@@ -18,6 +19,9 @@ function generateAccessCode(): string {
 
 // GET /api/access-codes?courseId=xxx - List all access codes for a course
 export async function GET(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const session = await auth()
     if (!session || session.user.role !== 'ADMIN') {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -45,6 +49,9 @@ export async function GET(request: Request) {
 
 // POST /api/access-codes - Generate a new access code
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const session = await auth()
     if (!session || session.user.role !== 'ADMIN') {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

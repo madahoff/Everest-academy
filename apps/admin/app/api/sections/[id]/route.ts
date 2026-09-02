@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAdmin } from "@/lib/require-admin"
 
 // GET /api/sections/:id - Get section with questions
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const { id } = await params
         const section = await prisma.section.findUnique({
@@ -24,6 +28,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 // PATCH /api/sections/:id - Update section
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const { id } = await params
         const { questions, course, ...data } = await request.json()
@@ -41,6 +48,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 // DELETE /api/sections/:id - Delete section (cascade deletes questions, answers)
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const { id } = await params
         await prisma.section.delete({ where: { id } })

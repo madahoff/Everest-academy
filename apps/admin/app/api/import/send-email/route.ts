@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { sendEmail, replaceVariables } from "@/lib/mailer"
+import { requireAdmin } from "@/lib/require-admin"
 
 interface Recipient {
     email: string
@@ -14,6 +15,9 @@ interface SendEmailRequest {
 }
 
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const session = await auth()
     if (!session || session.user.role !== "ADMIN") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

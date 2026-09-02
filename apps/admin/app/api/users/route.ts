@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAdmin } from "@/lib/require-admin"
+import { USER_SELECT } from "@/lib/user-fields"
 
 // GET /api/users - List all users
 export async function GET() {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
+        // `select` explicite : sans lui, findMany renvoie la ligne entière — hachage de
+        // mot de passe compris — à tout appelant de la console.
         const users = await prisma.user.findMany({
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            select: USER_SELECT,
         })
         return NextResponse.json(users)
     } catch (error) {
@@ -16,6 +24,9 @@ export async function GET() {
 
 // POST /api/users - Create new user
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const body = await request.json()
         const { name, email, role, plan } = body
@@ -25,7 +36,8 @@ export async function POST(request: Request) {
         }
 
         const user = await prisma.user.create({
-            data: { name, email, role: role || 'STUDENT', plan: plan || 'FREE' }
+            data: { name, email, role: role || 'STUDENT', plan: plan || 'FREE' },
+            select: USER_SELECT,
         })
         return NextResponse.json(user, { status: 201 })
     } catch (error: any) {

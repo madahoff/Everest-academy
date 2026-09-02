@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAdmin } from "@/lib/require-admin"
 
 export async function GET() {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const products = await prisma.product.findMany({ orderBy: { createdAt: 'desc' } })
         return NextResponse.json(products)
@@ -11,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const body = await request.json()
         const { name, category, price, stock } = body

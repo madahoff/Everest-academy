@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAdmin } from "@/lib/require-admin"
 
 // GET /api/courses/:id/sections - List sections of a course
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const { id } = await params
         const sections = await prisma.section.findMany({
@@ -21,6 +25,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 // POST /api/courses/:id/sections - Create section (all fields required)
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     try {
         const { id: courseId } = await params
         const body = await request.json()
