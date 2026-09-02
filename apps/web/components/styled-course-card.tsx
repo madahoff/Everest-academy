@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { ArrowRight, BookOpen, Check, Clock, Crown, Layers, Lock, Play, Star, Users } from "lucide-react"
 import { useAuthModal } from "@/component/auth-modal-provider"
+import { useCurrency } from "@/component/currency-provider"
+import { formatAmount, resolvePrice } from "@/lib/pricing"
 
 const LEVEL_LABELS: Record<string, string> = {
     BEGINNER: "Débutant",
@@ -36,9 +38,12 @@ const Badge = ({ children, variant = "default" }: any) => {
 export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; variant?: "grid" | "list" }) => {
     const { data: session } = useSession()
     const { openAuth } = useAuthModal()
+    const currency = useCurrency()
 
-    const price = parseFloat(course.price);
-    const isFree = price === 0;
+    // Tarif dans la devise du visiteur. `amount` à null : le cours n'a pas de tarif
+    // international — il reste consultable, mais n'est pas proposé à l'achat ici.
+    const price = resolvePrice(course, currency);
+    const isFree = price.free;
     const hasAccess = Boolean(course.hasAccess);
     const viaPremium = hasAccess && course.accessSource === "premium";
     const viaAdmin = hasAccess && course.accessSource === "admin";
@@ -91,11 +96,16 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
             <span className="text-[10px] text-gray-400 uppercase tracking-wider">Votre accès</span>
             <span className="text-lg font-bold text-[#2563EB]">Débloqué</span>
         </div>
+    ) : price.amount === null ? (
+        <div className="flex flex-col">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Disponibilité</span>
+            <span className="text-lg font-bold text-gray-400">Bientôt</span>
+        </div>
     ) : (
         <div className="flex flex-col">
             <span className="text-[10px] text-gray-400 uppercase tracking-wider">Investissement</span>
             <span className="text-lg font-bold text-[#001F3F]">
-                {isFree ? "Gratuit" : `${price.toLocaleString("fr-FR")} Ar`}
+                {isFree ? "Gratuit" : formatAmount(price.amount, currency)}
             </span>
         </div>
     );

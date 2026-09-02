@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from "@/lib/require-admin"
 import { courseSales } from "@/lib/course-sales"
+import { parsePriceEur } from "@/lib/pricing"
 
 // GET /api/courses/:id - Cours complet : sections, questions, inscrits et revenu
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -58,6 +59,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // Convert price if provided
         if (body.price !== undefined) {
             body.price = parseFloat(String(body.price))
+        }
+
+        // Tarif international. Un champ vidé remet la colonne à NULL : le cours cesse
+        // alors d'être proposé hors de Madagascar, ce qui est une décision légitime.
+        if (body.priceEur !== undefined) {
+            const eur = parsePriceEur(body.priceEur)
+            if ('error' in eur) return NextResponse.json({ error: eur.error }, { status: 400 })
+            body.priceEur = eur.value
         }
 
         const course = await prisma.course.update({

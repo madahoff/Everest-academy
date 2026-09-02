@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { StyledCourseCard } from "@/components/styled-course-card"; // Votre composant existant
 import PremiumPackBanner, { type PremiumOffer } from "@/components/premium-pack-banner";
+import { useCurrency } from "@/component/currency-provider";
+import { resolvePrice } from "@/lib/pricing";
 
 // --- UI COMPONENTS INTERNES (Style Cohérent) ---
 
@@ -53,6 +55,7 @@ export default function CoursesList(props: CoursesListProps) {
 
 function CoursesListContent({ initialCourses, isPremium, premiumOffer }: CoursesListProps) {
     const searchParams = useSearchParams();
+    const currency = useCurrency();
 
     // --- STATE MANAGEMENT ---
     const [courses] = useState(initialCourses);
@@ -76,6 +79,11 @@ function CoursesListContent({ initialCourses, isPremium, premiumOffer }: Courses
         premium: courses.filter(c => parseFloat(c.price) > 0).length,
         unlocked: courses.filter(c => c.hasAccess).length,
     }), [courses]);
+
+    // Montant servant au tri, dans la devise du visiteur. `fallback` place les cours
+    // dépourvus de tarif à l'extrémité voulue selon le sens du tri.
+    const sortablePrice = (course: any, fallback = Infinity) =>
+        resolvePrice(course, currency).amount ?? fallback;
 
     // --- FILTERING LOGIC ---
     const filteredCourses = useMemo(() => {
@@ -107,11 +115,15 @@ function CoursesListContent({ initialCourses, isPremium, premiumOffer }: Courses
             case "popular":
                 result.sort((a, b) => (b.enrollmentCount || 0) - (a.enrollmentCount || 0));
                 break;
+            // Le tri porte sur le prix RÉELLEMENT AFFICHÉ : trier sur l'ariary alors que
+            // la carte montre des euros donnerait un ordre qui contredit la colonne lue.
+            // Les cours sans tarif dans cette devise ferment la marche dans les deux sens :
+            // ils n'ont pas de prix à comparer.
             case "price_asc":
-                result.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+                result.sort((a, b) => sortablePrice(a) - sortablePrice(b));
                 break;
             case "price_desc":
-                result.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+                result.sort((a, b) => sortablePrice(b, -Infinity) - sortablePrice(a, -Infinity));
                 break;
         }
 
@@ -122,7 +134,7 @@ function CoursesListContent({ initialCourses, isPremium, premiumOffer }: Courses
         }
 
         return result;
-    }, [courses, searchQuery, filterType, sortBy, stats.unlocked]);
+    }, [courses, searchQuery, filterType, sortBy, stats.unlocked, currency]);
 
     const handleReset = () => {
         setSearchQuery("");

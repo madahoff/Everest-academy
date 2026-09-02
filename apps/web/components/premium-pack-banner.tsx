@@ -7,9 +7,13 @@ import { useSession } from "next-auth/react";
 import { Check, Crown, Infinity as InfinityIcon, Lock, ShieldCheck, Sparkles, X, ArrowRight } from "lucide-react";
 import PaymentMethods from "@/components/payment-methods";
 import { useAuthModal } from "@/component/auth-modal-provider";
+import { formatAmount, type Currency } from "@/lib/pricing";
 
 export interface PremiumOffer {
-    price: number;
+    /** Devise de tous les montants de cette offre, résolue côté serveur. */
+    currency: Currency;
+    /** Tarif du pack. `null` : pas de tarif dans cette devise — rien à proposer. */
+    price: number | null;
     /** Offre proposée à la vente : réglée depuis la console d'administration. */
     active: boolean;
     catalogueValue: number;
@@ -17,8 +21,6 @@ export interface PremiumOffer {
     courseCount: number;
     premiumCourseCount: number;
 }
-
-const ar = (value: number) => `${value.toLocaleString("fr-FR")} Ar`;
 
 const ARGUMENTS = [
     { icon: Lock, label: "Tout le catalogue débloqué", detail: "Chaque module premium, immédiatement" },
@@ -47,8 +49,12 @@ export default function PremiumPackBanner({
     const { openAuth } = useAuthModal();
     const [checkout, setCheckout] = useState(false);
 
-    // Offre retirée de la vente : rien à proposer — mais un membre garde son bandeau.
-    if (!isPremium && !offer.active) return null;
+    /** Montant dans la devise du visiteur. */
+    const money = (value: number) => formatAmount(value, offer.currency);
+
+    // Offre retirée de la vente, ou sans tarif dans la devise du visiteur : rien à
+    // proposer — mais un membre garde son bandeau.
+    if (!isPremium && (!offer.active || offer.price === null)) return null;
 
     if (isPremium) {
         return (
@@ -77,6 +83,9 @@ export default function PremiumPackBanner({
             </section>
         );
     }
+
+    // Passé les deux retours ci-dessus, le tarif est nécessairement présent.
+    const price = offer.price as number;
 
     const openCheckout = () => {
         if (!session) {
@@ -139,7 +148,7 @@ export default function PremiumPackBanner({
                                         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-2">
                                             Régler le Pack Premium
                                         </p>
-                                        <p className="text-3xl font-bold tracking-tight">{ar(offer.price)}</p>
+                                        <p className="text-3xl font-bold tracking-tight">{money(price)}</p>
                                     </div>
                                     <button
                                         onClick={() => setCheckout(false)}
@@ -152,7 +161,8 @@ export default function PremiumPackBanner({
 
                                 <PaymentMethods
                                     endpoint="/api/premium"
-                                    amount={offer.price}
+                                    amount={price}
+                                    currency={offer.currency}
                                     label="Pack Premium"
                                     returnPath="/courses"
                                     loginCallbackUrl="/courses"
@@ -176,17 +186,17 @@ export default function PremiumPackBanner({
                                 </p>
 
                                 <div className="flex items-end gap-4 mb-2">
-                                    <span className="text-5xl font-bold tracking-tighter">{ar(offer.price)}</span>
+                                    <span className="text-5xl font-bold tracking-tighter">{money(price)}</span>
                                     {offer.savings > 0 && (
                                         <span className="text-sm text-gray-600 line-through mb-2">
-                                            {ar(offer.catalogueValue)}
+                                            {money(offer.catalogueValue)}
                                         </span>
                                     )}
                                 </div>
 
                                 {offer.savings > 0 && (
                                     <p className="inline-block bg-[#2563EB] px-3 py-1 text-[10px] font-bold uppercase tracking-widest mb-8">
-                                        Économisez {ar(offer.savings)}
+                                        Économisez {money(offer.savings)}
                                     </p>
                                 )}
 

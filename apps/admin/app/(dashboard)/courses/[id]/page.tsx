@@ -21,11 +21,13 @@ import {
     FileText,
     Users,
     Wallet,
+    Globe,
     Gift
 } from "lucide-react"
 import { SectionFormDialog } from "@/components/dialogs/section-form-dialog"
 import { QuestionFormDialog } from "@/components/dialogs/question-form-dialog"
 import { AccessCodeManager } from "@/components/access-code-manager"
+import { formatAr, formatEur, hasPriceEur } from "@/lib/pricing"
 import * as React from "react"
 
 // --- TYPES ---
@@ -63,6 +65,8 @@ interface Course {
     cardImage: string
     welcomeVideo: string
     price: string | number
+    /** Tarif hors Madagascar. `null` : cours non proposé à l'achat à l'étranger. */
+    priceEur: string | number | null
     status: "ACTIVE" | "DRAFT"
     salesCount: number
     /** Personnes ayant accès : achats, codes utilisés et inscriptions gratuites. */
@@ -124,10 +128,8 @@ export default function CourseDetailPage() {
 
     const formatPrice = (price: string | number) => {
         const numPrice = typeof price === 'string' ? parseFloat(price) : price
-        return numPrice === 0 ? 'Gratuit' : `${numPrice.toFixed(2)}  Ar`
+        return numPrice === 0 ? 'Gratuit' : formatAr(numPrice)
     }
-
-    const formatAr = (value: number) => `${Math.round(value).toLocaleString('fr-FR')} Ar`
 
     if (isLoading) {
         return (
@@ -178,6 +180,17 @@ export default function CourseDetailPage() {
                         </div>
                         <div className="text-right text-white">
                             <p className="text-3xl font-black">{formatPrice(course.price)}</p>
+                            {/* Les deux tarifs se lisent côte à côte : c'est ici qu'on
+                                repère qu'un cours publié n'est vendable qu'à Madagascar. */}
+                            {Number(course.price) > 0 && (
+                                hasPriceEur(course.priceEur) ? (
+                                    <p className="text-sm font-black text-white/70">{formatEur(course.priceEur)} hors Madagascar</p>
+                                ) : (
+                                    <p className="flex items-center justify-end gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-400 mt-1">
+                                        <Globe className="w-3 h-3" /> Pas de prix en euros
+                                    </p>
+                                )
+                            )}
                             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
                                 {course.enrollments ?? 0} personnes ont accès
                             </p>

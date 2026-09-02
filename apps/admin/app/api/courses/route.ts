@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from "@/lib/require-admin"
 import { courseSalesByCourse } from "@/lib/course-sales"
+import { parsePriceEur } from "@/lib/pricing"
 
 // GET /api/courses - Liste des cours, avec sections, inscrits et revenu généré
 export async function GET() {
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { title, description, heroImage, cardImage, welcomeVideo, price, status } = body
+        const { title, description, heroImage, cardImage, welcomeVideo, price, priceEur, status } = body
 
         // Validation - all fields required
         if (!title || !description || !heroImage || !cardImage || !welcomeVideo || price === undefined) {
@@ -56,6 +57,10 @@ export async function POST(request: Request) {
                 error: 'Tous les champs sont obligatoires: title, description, heroImage, cardImage, welcomeVideo, price'
             }, { status: 400 })
         }
+
+        // Tarif international : facultatif, mais s'il est fourni il doit être payable.
+        const eur = parsePriceEur(priceEur)
+        if ('error' in eur) return NextResponse.json({ error: eur.error }, { status: 400 })
 
         const course = await prisma.course.create({
             data: {
@@ -65,6 +70,7 @@ export async function POST(request: Request) {
                 cardImage,
                 welcomeVideo,
                 price: parseFloat(String(price)) || 0,
+                priceEur: eur.value,
                 status: status || 'DRAFT'
             }
         })

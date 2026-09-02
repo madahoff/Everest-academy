@@ -11,22 +11,31 @@ import {
     Users,
     Layers,
     Wallet,
+    Globe,
 } from "lucide-react"
+
+import { formatAr, formatEur, parsePriceEur } from "@/lib/pricing"
 
 // --- TYPES ---
 interface PremiumPlanData {
     price: number
+    /** Tarif hors Madagascar. `null` : le pack n'y est pas proposé. */
+    priceEur: number | null
     active: boolean
     updatedAt: string | null
     courseCount: number
     premiumCourseCount: number
     catalogueValue: number
+    /** Valeur du catalogue pour un acheteur étranger : cours tarifés en euros seulement. */
+    catalogueValueEur: number
+    /** Cours payants sans tarif international : autant de ventes fermées à l'étranger. */
+    missingPriceEurCount: number
     memberCount: number
     soldCount: number
     revenue: number
 }
 
-const ar = (value: number) => `${Math.round(value).toLocaleString("fr-FR")} Ar`
+const ar = formatAr
 
 // --- COMPOSANTS UI INTERNES ---
 
@@ -60,6 +69,7 @@ export default function PremiumPage() {
     })
 
     const [price, setPrice] = useState("")
+    const [priceEur, setPriceEur] = useState("")
     const [active, setActive] = useState(true)
     const [formError, setFormError] = useState<string | null>(null)
     const [saved, setSaved] = useState(false)
@@ -69,11 +79,14 @@ export default function PremiumPage() {
     useEffect(() => {
         if (!data) return
         setPrice(String(data.price))
+        // Champ VIDE quand il n'y a pas de tarif international : « 0 » se lirait
+        // comme la gratuité, et « null » comme une valeur.
+        setPriceEur(data.priceEur === null ? "" : String(data.priceEur))
         setActive(data.active)
     }, [data])
 
     const mutation = useMutation({
-        mutationFn: async (payload: { price: number; active: boolean }) => {
+        mutationFn: async (payload: { price: number; priceEur: number | null; active: boolean }) => {
             const res = await fetch("/api/premium", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -94,7 +107,14 @@ export default function PremiumPage() {
 
     const parsedPrice = Number(price)
     const priceValid = Number.isInteger(parsedPrice) && parsedPrice > 0
-    const dirty = data ? parsedPrice !== data.price || active !== data.active : false
+
+    const parsedEur = parsePriceEur(priceEur.trim())
+    const eurError = "error" in parsedEur ? parsedEur.error : null
+    const eurValue = "error" in parsedEur ? null : parsedEur.value
+
+    const dirty = data
+        ? parsedPrice !== data.price || eurValue !== data.priceEur || active !== data.active
+        : false
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -102,10 +122,15 @@ export default function PremiumPage() {
             setFormError("Le tarif doit être un nombre entier d'ariary (ex : 199000)")
             return
         }
-        mutation.mutate({ price: parsedPrice, active })
+        if (eurError) {
+            setFormError(eurError)
+            return
+        }
+        mutation.mutate({ price: parsedPrice, priceEur: eurValue, active })
     }
 
     const savings = data ? data.catalogueValue - (priceValid ? parsedPrice : data.price) : 0
+    const savingsEur = data && eurValue !== null ? data.catalogueValueEur - eurValue : 0
 
     return (
         <div className="flex-1 font-sans text-[#050505]">
@@ -179,6 +204,30 @@ export default function PremiumPage() {
                             Ariary entiers uniquement — le service de paiement refuse les centimes.
                         </p>
 
+                        {/*
+                          Tarif international. Laissé vide, le pack disparaît du catalogue
+                          pour les visiteurs hors de Madagascar — aucune conversion n'est
+                          faite à leur intention, c'est ce tarif ou rien.
+                        */}
+                        <label className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                            <Globe className="w-3 h-3" /> Prix hors Madagascar
+                        </label>
+                        <div className="flex items-center border-b-2 border-[#050505] focus-within:border-[#2563EB] transition-colors mb-3">
+                            <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={priceEur}
+                                onChange={(e) => setPriceEur(e.target.value)}
+                                className="flex-1 bg-transparent py-4 text-4xl font-black tracking-tighter italic outline-none"
+                                placeholder="Vide = non proposé"
+                            />
+                            <span className="text-sm font-black uppercase tracking-widest text-gray-300 pl-4">€</span>
+                        </div>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-10 ${eurError ? "text-red-500" : "text-gray-400"}`}>
+                            {eurError ?? "Euros entiers · réglable par carte bancaire uniquement"}
+                        </p>
+
                         {/* Mise en vente */}
                         <div className="flex items-start justify-between gap-8 border-t border-gray-100 pt-8 mb-10">
                             <div>
@@ -223,6 +272,36 @@ export default function PremiumPage() {
                                     </span>
                                 )}
                             </p>
+
+                            {/* Ce que verra un visiteur hors de Madagascar. */}
+                            <div className="mt-6 pt-6 border-t border-gray-200">
+                                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-300 mb-3 flex items-center gap-2">
+                                    <Globe className="w-3 h-3" /> Hors Madagascar
+                                </p>
+                                {eurValue === null ? (
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 flex items-center gap-2">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        Sans prix en euros, le pack n'apparaît pas à l'étranger
+                                    </p>
+                                ) : (
+                                    <>
+                                        <div className="flex items-end gap-4">
+                                            <span className="text-3xl font-black tracking-tighter italic">{formatEur(eurValue)}</span>
+                                            {savingsEur > 0 && (
+                                                <span className="text-sm text-gray-400 line-through mb-1">
+                                                    {formatEur(data.catalogueValueEur)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {data.missingPriceEurCount > 0 && (
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mt-3 flex items-center gap-2">
+                                                <AlertTriangle className="w-3 h-3" />
+                                                {data.missingPriceEurCount} cours payant{data.missingPriceEurCount > 1 ? "s" : ""} sans prix en euros
+                                            </p>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         </div>
 
                         {formError && (
@@ -232,7 +311,7 @@ export default function PremiumPage() {
                         <div className="flex items-center gap-6">
                             <button
                                 type="submit"
-                                disabled={mutation.isPending || !dirty || !priceValid}
+                                disabled={mutation.isPending || !dirty || !priceValid || eurError !== null}
                                 className="px-10 py-4 bg-[#050505] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#2563EB] transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-3"
                             >
                                 {mutation.isPending ? (

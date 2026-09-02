@@ -15,9 +15,11 @@ import {
     Layers,
     Users,
     Wallet,
+    Globe,
     Image as ImageIcon
 } from "lucide-react"
 import { CourseFormDialog } from "@/components/dialogs/course-form-dialog"
+import { formatAr, formatEur, hasPriceEur } from "@/lib/pricing"
 
 // --- TYPES ---
 interface CourseData {
@@ -29,6 +31,8 @@ interface CourseData {
     welcomeVideo: string
     status: "ACTIVE" | "DRAFT"
     price: string | number
+    /** Tarif hors Madagascar. `null` : cours non proposé à l'achat à l'étranger. */
+    priceEur: string | number | null
     duration: string
     level: string
     salesCount: number
@@ -92,10 +96,10 @@ export default function CoursesPage() {
 
     const formatPrice = (price: string | number) => {
         const numPrice = typeof price === 'string' ? parseFloat(price) : price
-        return numPrice === 0 ? 'Gratuit' : `${numPrice.toFixed(2)}  Ar`
+        return numPrice === 0 ? 'Gratuit' : formatAr(numPrice)
     }
 
-    const formatAr = (value: number) => `${Math.round(value).toLocaleString('fr-FR')} Ar`
+
 
     const totalEnrollments = courses.reduce((sum, c) => sum + (c.enrollments ?? 0), 0)
     const totalRevenue = courses.reduce((sum, c) => sum + (c.revenue ?? 0), 0)
@@ -231,6 +235,21 @@ export default function CoursesPage() {
                                             {course._count?.sections || 0} sections
                                         </div>
                                         <span className="text-xs font-black">{formatPrice(course.price)}</span>
+                                        {/* Tarif international : son absence sur un cours payant
+                                            est un manque à combler, pas un détail — elle ferme
+                                            la vente à tous les visiteurs étrangers. */}
+                                        {Number(course.price) > 0 && (
+                                            hasPriceEur(course.priceEur) ? (
+                                                <span className="text-xs font-black text-gray-400">{formatEur(course.priceEur)}</span>
+                                            ) : (
+                                                <span
+                                                    title="Aucun prix en euros : ce cours n'est pas vendable hors de Madagascar"
+                                                    className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-amber-600"
+                                                >
+                                                    <Globe className="w-3 h-3" /> € manquant
+                                                </span>
+                                            )
+                                        )}
                                     </div>
 
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -244,6 +263,7 @@ export default function CoursesPage() {
                                                 cardImage: course.cardImage,
                                                 welcomeVideo: course.welcomeVideo,
                                                 price: typeof course.price === 'string' ? parseFloat(course.price) : course.price,
+                                                priceEur: course.priceEur === null ? "" : course.priceEur,
                                                 duration: course.duration || "Variable",
                                                 level: course.level || "INTERMEDIATE",
                                                 status: course.status

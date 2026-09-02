@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, X, ExternalLink, ShieldCheck, AlertCircle, CheckCircle2 } from "lucide-react";
+import { HOME_CURRENCY, formatAmount, type Currency } from "@/lib/pricing";
 
 export type PaymentMode = "mobile_money" | "international";
 
@@ -27,6 +28,8 @@ interface PaymentDialogProps {
     expectedOrigin?: string | null;
     title: string;
     amount: number;
+    /** Devise du montant affiché. Ariary par défaut, comportement historique. */
+    currency?: Currency;
     onSuccess: (result: PaymentPollResult) => void;
     onFailure: (result: PaymentPollResult) => void;
     onClose: () => void;
@@ -54,6 +57,7 @@ export default function PaymentDialog({
     expectedOrigin,
     title,
     amount,
+    currency = HOME_CURRENCY,
     onSuccess,
     onFailure,
     onClose,
@@ -139,7 +143,7 @@ export default function PaymentDialog({
                         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400">Paiement sécurisé</p>
                         <h2 className="text-lg font-bold uppercase tracking-tighter mt-1">{title}</h2>
                         <p className="text-2xl font-black tracking-tighter text-[#001F3F] mt-2">
-                            {amount.toLocaleString("fr-FR")} Ar
+                            {formatAmount(amount, currency)}
                         </p>
                     </div>
                     <button

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/component/providers";
+import { getRequestCurrency } from "@/lib/request-currency";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,17 +24,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+/**
+ * Le layout lit la devise du visiteur et la descend dans l'arbre client.
+ *
+ * Cette lecture rend tout le site dynamique — c'est voulu : une page mise en cache
+ * afficherait le tarif du visiteur précédent, ce qui est exactement le défaut qu'on
+ * cherche à éviter.
+ */
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currency = await getRequestCurrency();
+
   return (
-    <html lang="en">
+    <html lang="fr">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers>
+        <Providers currency={currency}>
           {children}
         </Providers>
       </body>

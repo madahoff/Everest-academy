@@ -65,6 +65,7 @@ export default async function CourseDetail({ params }: { params: Promise<{ cours
     const serializedCourse = {
         ...course,
         price: course.price.toString(),
+        priceEur: course.priceEur === null ? null : course.priceEur.toString(),
         createdAt: course.createdAt.toISOString(),
         updatedAt: course.updatedAt.toISOString(),
         sections: (course as any).sections.map((section: any) => ({

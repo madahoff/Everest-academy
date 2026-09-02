@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth.config";
 import { getCourseAccess, getPremiumOffer } from "@/lib/premium";
+import { getRequestCurrency } from "@/lib/request-currency";
 import CoursesList from "@/components/courses-list";
 
 // Force dynamic rendering to avoid database access at build time
@@ -12,6 +13,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function CoursesPage() {
     const session = await getServerSession(authOptions);
+
+    // Devise du visiteur : ariary à Madagascar, euro ailleurs. Le catalogue entier
+    // — cartes ET bandeau Premium — est chiffré dans cette devise et dans elle seule.
+    const currency = await getRequestCurrency();
 
     // 1. Fetch Real Data from Server with ratings and enrollment count
     const [courses, access, premiumOffer] = await Promise.all([
@@ -37,7 +42,7 @@ export default async function CoursesPage() {
             }
         }),
         getCourseAccess(session?.user?.id),
-        getPremiumOffer(),
+        getPremiumOffer(currency),
     ]);
 
     // 2. Transform/Serialize Decimal fields and calculate average rating + enrollment count
@@ -56,6 +61,9 @@ export default async function CoursesPage() {
         return {
             ...course,
             price: course.price.toString(),
+            // Les Decimal Prisma ne traversent pas la frontière serveur/client :
+            // on les sérialise, `null` restant `null` (aucun tarif international).
+            priceEur: course.priceEur === null ? null : course.priceEur.toString(),
             createdAt: course.createdAt.toISOString(),
             updatedAt: course.updatedAt.toISOString(),
             sections: course.sections.map((s: any) => ({ id: s.id })),

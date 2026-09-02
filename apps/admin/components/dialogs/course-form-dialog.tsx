@@ -3,13 +3,14 @@
 import * as React from "react"
 import { toast } from "sonner"
 import { useForm } from "react-hook-form"
-import { Plus, Image, Video, FileText, Clock, GraduationCap } from "lucide-react"
+import { Plus, Image, Video, FileText, Clock, GraduationCap, Globe } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileUpload } from "@/components/ui/file-upload"
+import { parsePriceEur } from "@/lib/pricing"
 
 interface CourseFormData {
     title: string
@@ -18,6 +19,11 @@ interface CourseFormData {
     cardImage: string
     welcomeVideo: string
     price: number
+    /**
+     * Tarif appliqué aux visiteurs situés hors de Madagascar. Facultatif : laissé
+     * vide, le cours n'est simplement pas proposé à l'achat à l'étranger.
+     */
+    priceEur: number | string | null
     duration: string
     level: string
     status: string
@@ -35,13 +41,15 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
     const isEdit = !!editData
 
     const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CourseFormData>({
-        defaultValues: editData || { status: "DRAFT", price: 0, duration: "Variable", level: "INTERMEDIATE" }
+        defaultValues: editData || { status: "DRAFT", price: 0, priceEur: "", duration: "Variable", level: "INTERMEDIATE" }
     })
 
     React.useEffect(() => {
         if (editData) {
             Object.entries(editData).forEach(([key, value]) => {
-                setValue(key as keyof CourseFormData, value)
+                // Un tarif international absent doit laisser le champ VIDE, pas
+                // afficher « null » ni « 0 » — l'un et l'autre se liraient comme un prix.
+                setValue(key as keyof CourseFormData, (value ?? "") as never)
             })
         }
     }, [editData, setValue])
@@ -55,7 +63,13 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
             const res = await fetch(url, {
                 method,
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...data, price: parseFloat(String(data.price)) || 0 })
+                body: JSON.stringify({
+                    ...data,
+                    price: parseFloat(String(data.price)) || 0,
+                    // Champ vide = pas de tarif international, transmis comme un null
+                    // explicite pour que le serveur efface la colonne.
+                    priceEur: data.priceEur === "" || data.priceEur === null ? null : Number(data.priceEur),
+                })
             })
 
             if (!res.ok) {
@@ -176,32 +190,63 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                    Prix ( Ar) <span className="text-red-500">*</span>
+                                    Prix Madagascar (Ar) <span className="text-red-500">*</span>
                                 </Label>
                                 <Input
                                     {...register("price", { required: "Le prix est obligatoire" })}
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     min="0"
-                                    placeholder="99.00"
+                                    placeholder="99000"
                                     className="h-12 rounded-none border-gray-200"
                                 />
                                 {errors.price && <p className="text-red-500 text-[10px]">{errors.price.message}</p>}
                             </div>
 
+                            {/*
+                              Tarif international. Facultatif à dessein : laissé vide, le
+                              cours n'est pas proposé à l'achat hors de Madagascar — ce qui
+                              vaut mieux qu'un prix converti à un taux inventé par le code.
+                            */}
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                                    <Globe className="w-3 h-3" /> Prix hors Madagascar (€)
+                                </Label>
+                                <Input
+                                    {...register("priceEur", {
+                                        validate: (value) => {
+                                            const parsed = parsePriceEur(value)
+                                            return "error" in parsed ? parsed.error : true
+                                        },
+                                    })}
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    placeholder="Laisser vide = non vendu à l'étranger"
+                                    className="h-12 rounded-none border-gray-200"
+                                />
+                                {errors.priceEur ? (
+                                    <p className="text-red-500 text-[10px]">{errors.priceEur.message}</p>
+                                ) : (
+                                    <p className="text-[9px] text-gray-400 uppercase tracking-widest">
+                                        Euros entiers · réglable par carte uniquement
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
                                     <Clock className="w-3 h-3" /> Durée
                                 </Label>
                                 <Input
                                     {...register("duration")}
-                                    placeholder="Ex: 2h 30min, 5 semaines"
+                                    placeholder="Ex: 2h 30min"
                                     className="h-12 rounded-none border-gray-200"
                                 />
                             </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
                                     <GraduationCap className="w-3 h-3" /> Niveau

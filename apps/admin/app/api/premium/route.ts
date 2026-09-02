@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/require-admin"
+import { parsePriceEur } from "@/lib/pricing"
 
 /** Ligne unique de réglage : le tarif du pack n'est pas un catalogue. */
 const PREMIUM_PLAN_ID = "default"
@@ -18,6 +19,9 @@ async function readPlan() {
     const plan = await prisma.premiumPlan.findUnique({ where: { id: PREMIUM_PLAN_ID } })
     return {
         price: plan ? Number(plan.price) : DEFAULT_PRICE,
+        // Pas de tarif de repli en euros : tant qu'il n'est pas saisi, le pack n'est
+        // pas proposé hors de Madagascar. Une valeur inventée serait pire qu'aucune.
+        priceEur: plan?.priceEur == null ? null : Number(plan.priceEur),
         active: plan ? plan.active : true,
         updatedAt: plan?.updatedAt ?? null,
     }
@@ -29,7 +33,7 @@ async function readPlan() {
  */
 async function readContext() {
     const [courses, members, orders] = await Promise.all([
-        prisma.course.findMany({ where: { status: "ACTIVE" }, select: { price: true } }),
+        prisma.course.findMany({ where: { status: "ACTIVE" }, select: { price: true, priceEur: true } }),
         prisma.user.count({ where: { plan: "PREMIUM" } }),
         prisma.orderItem.findMany({
             where: { isPremiumPack: true, order: { status: "PAID" } },
@@ -38,11 +42,17 @@ async function readContext() {
     ])
 
     const prices = courses.map((c) => Number(c.price))
+    const pricesEur = courses.map((c) => (c.priceEur == null ? 0 : Number(c.priceEur)))
 
     return {
         courseCount: courses.length,
         premiumCourseCount: prices.filter((p) => p > 0).length,
         catalogueValue: prices.reduce((sum, price) => sum + price, 0),
+        // Valeur du catalogue à l'unité pour un acheteur étranger : seuls les cours
+        // réellement tarifés en euros y figurent, ce sont les seuls qu'il peut acheter.
+        catalogueValueEur: pricesEur.reduce((sum, price) => sum + price, 0),
+        /** Cours payants dépourvus de tarif international : autant de ventes fermées. */
+        missingPriceEurCount: courses.filter((c) => Number(c.price) > 0 && c.priceEur == null).length,
         memberCount: members,
         soldCount: orders.length,
         revenue: orders.reduce((sum, item) => sum + Number(item.amount), 0),
@@ -84,14 +94,20 @@ export async function PUT(request: Request) {
             )
         }
 
+        // Tarif international : facultatif. Vidé, il retire le pack de la vente hors
+        // de Madagascar sans toucher au tarif malgache ni aux accès déjà accordés.
+        const eur = parsePriceEur(body.priceEur)
+        if ("error" in eur) return NextResponse.json({ error: eur.error }, { status: 400 })
+
         const plan = await prisma.premiumPlan.upsert({
             where: { id: PREMIUM_PLAN_ID },
-            update: { price, active },
-            create: { id: PREMIUM_PLAN_ID, price, active },
+            update: { price, priceEur: eur.value, active },
+            create: { id: PREMIUM_PLAN_ID, price, priceEur: eur.value, active },
         })
 
         return NextResponse.json({
             price: Number(plan.price),
+            priceEur: plan.priceEur == null ? null : Number(plan.priceEur),
             active: plan.active,
             updatedAt: plan.updatedAt,
         })

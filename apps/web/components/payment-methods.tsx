@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Wallet, Smartphone, CreditCard, Loader2, ArrowRight } from "lucide-react";
 import PaymentDialog, { type PaymentMode, type PaymentPollResult } from "@/components/payment-dialog";
+import { HOME_CURRENCY, formatAmount, methodsFor, type Currency } from "@/lib/pricing";
 
 type Method = "WALLET" | "MOBILE_MONEY" | "CARD";
 
@@ -22,6 +23,11 @@ interface PaymentMethodsProps {
     /** Route de règlement : /api/checkout ou /api/courses/:id/purchase. */
     endpoint: string;
     amount: number;
+    /**
+     * Devise du montant. Elle décide aussi des moyens présentés : hors ariary, ni le
+     * solde (tenu en ariary) ni le Mobile Money (service malgache) ne peuvent régler.
+     */
+    currency?: Currency;
     /** Libellé affiché dans la fenêtre de paiement. */
     label: string;
     /** Chemin de retour (relatif) où renvoyer le payeur après Vanilla Pay. */
@@ -42,6 +48,7 @@ interface PaymentMethodsProps {
 export default function PaymentMethods({
     endpoint,
     amount,
+    currency = HOME_CURRENCY,
     label,
     returnPath,
     onPaid,
@@ -50,6 +57,7 @@ export default function PaymentMethods({
 }: PaymentMethodsProps) {
     const router = useRouter();
     const { data: session } = useSession();
+    const available = methodsFor(currency);
 
     const [balance, setBalance] = useState<number | null>(null);
     const [walletConfigured, setWalletConfigured] = useState(true);
@@ -65,6 +73,8 @@ export default function PaymentMethods({
 
     const refreshBalance = useCallback(async () => {
         if (!session?.user) return;
+        // Commande en euros : le solde ne peut pas la régler, inutile d'aller le lire.
+        if (!methodsFor(currency).includes("WALLET")) return;
         try {
             const res = await fetch("/api/wallet", { cache: "no-store" });
             if (!res.ok) return;
@@ -74,7 +84,7 @@ export default function PaymentMethods({
         } catch {
             // Solde indisponible : les autres moyens de paiement restent utilisables.
         }
-    }, [session]);
+    }, [session, currency]);
 
     useEffect(() => {
         void refreshBalance();
@@ -191,7 +201,8 @@ export default function PaymentMethods({
 
     return (
         <div className="space-y-3">
-            {/* Solde */}
+            {/* Solde — ariary uniquement */}
+            {available.includes("WALLET") && (
             <button
                 onClick={() => pay("WALLET")}
                 disabled={pending !== null || settling || (session?.user != null && !walletUsable)}
@@ -206,11 +217,12 @@ export default function PaymentMethods({
                     Payer avec mon solde
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">
-                    {balance === null ? "—" : `${balance.toLocaleString("fr-FR")} Ar`}
+                    {balance === null ? "—" : formatAmount(balance, HOME_CURRENCY)}
                 </span>
             </button>
+            )}
 
-            {session?.user && walletConfigured && balance !== null && balance < amount && (
+            {available.includes("WALLET") && session?.user && walletConfigured && balance !== null && balance < amount && (
                 <button
                     onClick={() => router.push("/wallet")}
                     className="w-full text-[10px] font-bold uppercase tracking-widest text-[#2563EB] hover:text-[#001F3F] flex items-center justify-center gap-1 transition-colors"
@@ -219,7 +231,8 @@ export default function PaymentMethods({
                 </button>
             )}
 
-            {/* Mobile Money */}
+            {/* Mobile Money — MVola / Orange / Airtel, donc Madagascar uniquement */}
+            {available.includes("MOBILE_MONEY") && (
             <button
                 onClick={() => pay("MOBILE_MONEY")}
                 disabled={pending !== null || settling}
@@ -239,6 +252,7 @@ export default function PaymentMethods({
                     MVola · Orange · Airtel
                 </span>
             </button>
+            )}
 
             {/* Carte bancaire */}
             <button
@@ -289,6 +303,7 @@ export default function PaymentMethods({
                     expectedOrigin={dialog.origin}
                     title={label}
                     amount={amount}
+                    currency={currency}
                     onSuccess={onDialogSuccess}
                     onFailure={onDialogFailure}
                     onClose={() => setDialog(null)}

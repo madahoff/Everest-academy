@@ -6,7 +6,12 @@ import { useSession } from "next-auth/react"
 type CartItem = {
     id: string
     title: string
-    price: number
+    /**
+     * Montant dans la devise du visiteur, résolu par `/api/cart`.
+     * `null` : l'article n'a pas de tarif dans cette devise — il n'est pas réglable
+     * ici, et le panier le signale au lieu de l'ignorer.
+     */
+    price: number | null
     image?: string
     type: 'course' | 'product'
 }

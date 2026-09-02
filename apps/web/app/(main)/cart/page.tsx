@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCart } from "@/component/cart-provider";
 import { useAuthModal } from "@/component/auth-modal-provider";
+import { useCurrency } from "@/component/currency-provider";
 import PaymentMethods from "@/components/payment-methods";
+import { formatAmount } from "@/lib/pricing";
 import {
     ShoppingCart,
     Minus,
@@ -59,8 +61,14 @@ export default function Cart() {
     const { data: session } = useSession();
     const { cart, removeFromCart, addToCart, clearCart, isLoading } = useCart();
     const { openAuth } = useAuthModal();
+    const currency = useCurrency();
     const cartItems = useMemo(() => groupCartItems(cart), [cart]);
-    const subtotal = cart.reduce((sum, item) => sum + Number(item.price), 0);
+
+    // Un article sans tarif dans la devise du visiteur n'a pas de montant : il ne
+    // peut ni entrer dans le total, ni être réglé. On bloque plutôt que d'encaisser
+    // un panier amputé — c'est aussi ce que fait le serveur (`buildCartItems`).
+    const blocked = cart.filter((item: any) => item.price === null || item.price === undefined);
+    const subtotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
     const shipping = 0; // Digital goods mostly
     const total = subtotal + shipping;
 
@@ -126,8 +134,16 @@ export default function Cart() {
                                     </div>
 
                                     {/* Price */}
-                                    <div className="w-24 text-right">
-                                        <span className="text-sm font-bold tracking-tight">{(Number(item.price) * item.quantity).toFixed(2)} Ar</span>
+                                    <div className="w-28 text-right">
+                                        {item.price === null || item.price === undefined ? (
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">
+                                                Indisponible ici
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm font-bold tracking-tight">
+                                                {formatAmount(Number(item.price) * item.quantity, currency)}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -142,7 +158,7 @@ export default function Cart() {
                             <div className="space-y-4 mb-10">
                                 <div className="flex justify-between text-xs font-light">
                                     <span className="text-gray-500">Sous-total</span>
-                                    <span className="font-medium">{subtotal.toFixed(2)} Ar</span>
+                                    <span className="font-medium">{formatAmount(subtotal, currency)}</span>
                                 </div>
                                 <div className="flex justify-between text-xs font-light">
                                     <span className="text-gray-500">Frais</span>
@@ -150,14 +166,21 @@ export default function Cart() {
                                 </div>
                                 <div className="pt-4 border-t border-gray-800 flex justify-between items-baseline">
                                     <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Total</span>
-                                    <span className="text-3xl font-bold tracking-tighter">{total.toFixed(2)} Ar</span>
+                                    <span className="text-3xl font-bold tracking-tighter">{formatAmount(total, currency)}</span>
                                 </div>
                             </div>
 
-                            {session ? (
+                            {blocked.length > 0 ? (
+                                <div className="p-4 border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-200 leading-relaxed">
+                                    {blocked.length === 1 ? "Un article de votre panier n'est" : `${blocked.length} articles de votre panier ne sont`}{" "}
+                                    pas proposé{blocked.length > 1 ? "s" : ""} à l'achat depuis votre pays.
+                                    Retirez-{blocked.length > 1 ? "les" : "le"} pour poursuivre le règlement.
+                                </div>
+                            ) : session ? (
                                 <PaymentMethods
                                     endpoint="/api/checkout"
                                     amount={total}
+                                    currency={currency}
                                     label={`Panier Everest (${cartItems.length} article${cartItems.length > 1 ? 's' : ''})`}
                                     returnPath="/cart"
                                     loginCallbackUrl="/cart"

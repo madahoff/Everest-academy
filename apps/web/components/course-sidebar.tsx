@@ -6,6 +6,8 @@ import { Play, Heart, Share2, Award, Layers, Info, CheckCircle, X, Volume2, Volu
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import PaymentMethods from "@/components/payment-methods";
+import { useCurrency } from "@/component/currency-provider";
+import { UNAVAILABLE_ABROAD, formatAmount, resolvePrice } from "@/lib/pricing";
 
 const Button = ({ children, variant = "primary", size = "md", className = "", onClick, disabled, ...props }: any) => {
     const baseStyle = "font-bold uppercase tracking-widest transition-all duration-300 rounded-none border flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -54,6 +56,7 @@ function isDirectVideo(url: string): boolean {
 export default function CourseSidebar({ course, isPurchased, isFavorited = false, isFree = false }: { course: any, isPurchased: boolean, isFavorited?: boolean, isFree?: boolean }) {
     const router = useRouter();
     const { data: session } = useSession();
+    const currency = useCurrency();
     const [isLiked, setIsLiked] = useState(isFavorited);
     const [showVideo, setShowVideo] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
@@ -177,6 +180,10 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
     const embedUrl = course.welcomeVideo ? getEmbedUrl(course.welcomeVideo) : null;
     const isNativeVideo = course.welcomeVideo ? isDirectVideo(course.welcomeVideo) : false;
 
+    // Tarif dans la devise du visiteur. `amount` à null : ce cours n'a pas encore de
+    // tarif international — l'achat est fermé, mais un code d'accès reste recevable.
+    const price = resolvePrice(course, currency);
+
     return (
         <div className="sticky top-32 border border-gray-100 bg-white p-8 shadow-2xl shadow-gray-100">
 
@@ -188,9 +195,14 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
                         <p className="text-5xl font-black text-[#2563EB] tracking-tighter">Gratuit</p>
                         <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-2">Accès à vie · Certificat inclus</p>
                     </>
+                ) : price.amount === null ? (
+                    <>
+                        <p className="text-3xl font-black text-gray-400 tracking-tighter">Bientôt disponible</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-2">Dans votre pays</p>
+                    </>
                 ) : (
                     <>
-                        <p className="text-5xl font-black text-[#001F3F] tracking-tighter">{parseFloat(course.price).toLocaleString('fr-FR')} Ar</p>
+                        <p className="text-5xl font-black text-[#001F3F] tracking-tighter">{formatAmount(price.amount, currency)}</p>
                         <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-2">Accès à vie · Certificat inclus</p>
                     </>
                 )}
@@ -210,21 +222,30 @@ export default function CourseSidebar({ course, isPurchased, isFavorited = false
                 </Button>
             ) : (
                 <>
-                    {/* Achat direct — aucun code d'accès requis */}
-                    <PaymentMethods
-                        endpoint={`/api/courses/${course.id}/purchase`}
-                        amount={parseFloat(course.price)}
-                        label={course.title}
-                        returnPath={`/courses/${course.id}`}
-                        onPaid={(order) => {
-                            // Accès accordés : on emmène directement à la première section.
-                            if (order.firstSectionId) {
-                                router.push(`/courses/${course.id}/${order.firstSectionId}`);
-                            } else {
-                                router.refresh();
-                            }
-                        }}
-                    />
+                    {price.amount === null ? (
+                        /* Aucun tarif dans la devise du visiteur : on le dit, plutôt que
+                           d'ouvrir un règlement dont le montant serait inventé. */
+                        <div className="p-4 border border-gray-200 bg-gray-50 text-[11px] text-gray-600 leading-relaxed text-center">
+                            {UNAVAILABLE_ABROAD}
+                        </div>
+                    ) : (
+                        /* Achat direct — aucun code d'accès requis */
+                        <PaymentMethods
+                            endpoint={`/api/courses/${course.id}/purchase`}
+                            amount={price.amount}
+                            currency={currency}
+                            label={course.title}
+                            returnPath={`/courses/${course.id}`}
+                            onPaid={(order) => {
+                                // Accès accordés : on emmène directement à la première section.
+                                if (order.firstSectionId) {
+                                    router.push(`/courses/${course.id}/${order.firstSectionId}`);
+                                } else {
+                                    router.refresh();
+                                }
+                            }}
+                        />
+                    )}
 
                     <div className="flex items-center gap-3 my-5">
                         <span className="h-px flex-1 bg-gray-100" />

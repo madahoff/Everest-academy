@@ -12,6 +12,7 @@ import {
     Loader2
 } from "lucide-react"
 import { ProductFormDialog } from "@/components/dialogs/product-form-dialog"
+import { formatAr, formatEur, hasPriceEur } from "@/lib/pricing"
 
 // --- TYPES ---
 interface ProductData {
@@ -19,6 +20,8 @@ interface ProductData {
     name: string
     category: string
     price: string | number
+    /** Tarif hors Madagascar. `null` : produit non proposé à l'achat à l'étranger. */
+    priceEur: string | number | null
     stock: number
     status: "IN_STOCK" | "OUT_OF_STOCK"
     createdAt: string
@@ -73,10 +76,7 @@ export default function ProductsPage() {
         }
     }
 
-    const formatPrice = (price: string | number) => {
-        const numPrice = typeof price === 'string' ? parseFloat(price) : price
-        return `${numPrice.toFixed(2)}  Ar`
-    }
+    const formatPrice = (price: string | number) => formatAr(price)
 
     // Calculate stats
     const totalValue = products.reduce((sum, p) => {
@@ -186,6 +186,10 @@ export default function ProductsPage() {
                                     </td>
                                     <td className="p-6">
                                         <span className="text-sm font-black tracking-tighter italic">{formatPrice(product.price)}</span>
+                                        {/* Absence de tarif en euros : produit invendable à l'étranger. */}
+                                        <span className={`block text-[10px] font-black tracking-tighter ${hasPriceEur(product.priceEur) ? "text-gray-400" : "text-amber-600"}`}>
+                                            {hasPriceEur(product.priceEur) ? formatEur(product.priceEur) : "€ manquant"}
+                                        </span>
                                     </td>
                                     <td className="p-6 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">

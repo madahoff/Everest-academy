@@ -89,6 +89,12 @@ services:
       - WALLET_API_URL=${WALLET_API_URL}
       - WALLET_API_KEY=${WALLET_API_KEY}
       - APP_PUBLIC_URL=${WEB_URL}
+      # Tarification internationale : pays du visiteur → devise affichée et facturée.
+      # Valeurs vides assumées : le code retombe sur son service de géolocalisation par
+      # défaut, et sur « aucun pays forcé ». Pas de valeur par défaut écrite ici — la
+      # substitution de Compose se termine au premier `}`, et l'URL en contient un.
+      - GEO_LOOKUP_URL=${GEO_LOOKUP_URL:-}
+      - GEO_FORCE_COUNTRY=${GEO_FORCE_COUNTRY:-}
     volumes:
       - shared_uploads:/app/apps/web/public/uploads
     ports:

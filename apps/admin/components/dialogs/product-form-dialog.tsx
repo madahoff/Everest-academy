@@ -3,25 +3,38 @@
 import * as React from "react"
 import { toast } from "sonner"
 import { useForm } from "react-hook-form"
-import { Plus } from "lucide-react"
+import { Plus, Globe } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { parsePriceEur } from "@/lib/pricing"
 
-interface ProductFormData { name: string; category: string; price: number; stock: number }
+interface ProductFormData {
+    name: string
+    category: string
+    price: number
+    /** Tarif hors Madagascar. Vide : produit non proposé à l'achat à l'étranger. */
+    priceEur: number | string | null
+    stock: number
+}
 
 export function ProductFormDialog({ onSuccess, trigger }: { onSuccess?: () => void; trigger?: React.ReactNode }) {
     const [open, setOpen] = React.useState(false)
     const [loading, setLoading] = React.useState(false)
     const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<ProductFormData>({
-        defaultValues: { category: "Livre", price: 0, stock: 0 }
+        defaultValues: { category: "Livre", price: 0, priceEur: "", stock: 0 }
     })
 
     const onSubmit = async (data: ProductFormData) => {
         setLoading(true)
         try {
-            const res = await fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, price: parseFloat(String(data.price)) || 0, stock: parseInt(String(data.stock)) || 0 }) })
+            const res = await fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+                ...data,
+                price: parseFloat(String(data.price)) || 0,
+                priceEur: data.priceEur === "" || data.priceEur === null ? null : Number(data.priceEur),
+                stock: parseInt(String(data.stock)) || 0,
+            }) })
             if (!res.ok) throw new Error((await res.json()).error || "Failed")
             reset(); setOpen(false); onSuccess?.()
         } catch (error) { toast.error(error instanceof Error ? error.message : "Erreur") }
@@ -45,16 +58,36 @@ export function ProductFormDialog({ onSuccess, trigger }: { onSuccess?: () => vo
                         <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Catégorie</Label>
                         <Select defaultValue="Livre" onValueChange={(v) => setValue("category", v)}><SelectTrigger className="h-12 rounded-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Livre">Livre</SelectItem><SelectItem value="Ebook">Ebook</SelectItem><SelectItem value="Asset">Asset</SelectItem><SelectItem value="Merch">Merch</SelectItem></SelectContent></Select>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Prix ( Ar)</Label>
-                            <Input {...register("price")} type="number" step="0.01" min="0" placeholder="29.99" className="h-12 rounded-none border-gray-200" />
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Prix (Ar)</Label>
+                            <Input {...register("price")} type="number" step="1" min="0" placeholder="29000" className="h-12 rounded-none border-gray-200" />
+                        </div>
+                        {/* Vide : le produit n'est pas proposé hors de Madagascar. */}
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
+                                <Globe className="w-3 h-3" /> Prix (€)
+                            </Label>
+                            <Input
+                                {...register("priceEur", {
+                                    validate: (value) => {
+                                        const parsed = parsePriceEur(value)
+                                        return "error" in parsed ? parsed.error : true
+                                    },
+                                })}
+                                type="number"
+                                step="1"
+                                min="0"
+                                placeholder="Vide"
+                                className="h-12 rounded-none border-gray-200"
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Stock</Label>
                             <Input {...register("stock")} type="number" min="0" placeholder="50" className="h-12 rounded-none border-gray-200" />
                         </div>
                     </div>
+                    {errors.priceEur && <p className="text-red-500 text-[10px]">{errors.priceEur.message}</p>}
                     <div className="flex gap-3 pt-4 border-t border-gray-100">
                         <button type="button" onClick={() => setOpen(false)} className="flex-1 py-3 border border-gray-200 text-[10px] font-bold uppercase tracking-widest">Annuler</button>
                         <button type="submit" disabled={loading} className="flex-1 py-3 bg-[#050505] text-white text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">{loading ? "Création..." : "Ajouter"}</button>
