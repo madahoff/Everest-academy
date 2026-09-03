@@ -18,6 +18,7 @@ import {
 import { useSession } from "next-auth/react";
 import { useAuthModal } from "@/component/auth-modal-provider";
 import { CountdownBanner } from "@/components/countdown-banner";
+import MasterclassSpotlight from "@/components/masterclass-spotlight";
 
 // --- UI COMPONENTS (Style conservé) ---
 
@@ -59,6 +60,9 @@ export default function OratoryComingSoon() {
 
             {/* --- COMPTE À REBOURS LIVE --- */}
             <CountdownBanner />
+
+            {/* --- PROCHAINE MASTERCLASS : le raccourci vers l'inscription --- */}
+            <MasterclassSpotlight variant="dark" />
 
             {/* --- SECTION 1: HERO IMMERSIF --- */}
             <section className="relative min-h-screen flex flex-col justify-center bg-[#050505] text-white border-b border-gray-800">

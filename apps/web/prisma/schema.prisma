@@ -68,6 +68,27 @@ enum TopupStatus {
   FAILED
 }
 
+/// Cycle de vie d'une Masterclass mensuelle.
+/// DRAFT     : en préparation, invisible du public.
+/// PUBLISHED : proposée à l'inscription.
+/// ARCHIVED  : session passée. Conservée telle quelle — c'est l'historique.
+enum MasterclassStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// État d'une inscription. Le paiement, lui, se lit sur la commande rattachée :
+/// ces deux statuts ne se confondent pas — une inscription peut être confirmée
+/// sans commande (session offerte), et une commande payée sans participation.
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
 // Models
 model User {
   id                String     @id @default(cuid())
@@ -96,6 +117,8 @@ model User {
   sectionRatings SectionRating[]
   orders         Order[]
   topups         WalletTopup[]
+
+  masterclassRegistrations MasterclassRegistration[]
 
   // Identifiant du portefeuille chez le Wallet API (UUID). Le portefeuille est toujours
   // adressable par `ext:<user.id>` ; ce champ n'est conservé que pour le support.
@@ -269,8 +292,8 @@ model Product {
 /// pas un catalogue. Il est piloté depuis la console d'administration, jamais depuis
 /// le navigateur d'un acheteur — le montant d'une commande est toujours relu ici.
 model PremiumPlan {
-  id        String   @id @default("default")
-  price     Decimal  @db.Decimal(10, 2)
+  id                   String   @id @default("default")
+  price                Decimal  @db.Decimal(10, 2)
   /// Tarif international, en EUROS ENTIERS.
   ///
   /// Vanilla Pay reçoit le montant tel quel avec `devise: EUR`, et le Wallet API
@@ -279,7 +302,7 @@ model PremiumPlan {
   /// l'ariary n'a pas de subdivision.
   ///
   /// NULL = le pack n'est pas proposé hors de Madagascar.
-  priceEur  Decimal? @db.Decimal(10, 2)
+  priceEur             Decimal? @db.Decimal(10, 2)
   /// Nombre de modules ANNONCÉS sur la durée de l'offre — l'année académique.
   ///
   /// À distinguer du nombre de cours publiés, que le catalogue sait compter tout
@@ -288,8 +311,8 @@ model PremiumPlan {
   announcedCourseCount Int?
   /// Offre retirée de la vente : le catalogue cesse de la proposer, sans que les
   /// accès déjà accordés ne soient repris.
-  active    Boolean  @default(true)
-  updatedAt DateTime @updatedAt
+  active               Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
 
   @@map("premium_plan")
 }
@@ -411,6 +434,9 @@ model Order {
 
   items OrderItem[]
 
+  /// Inscription à une Masterclass réglée par cette commande, s'il y en a une.
+  masterclassRegistration MasterclassRegistration?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -427,6 +453,10 @@ model OrderItem {
   course    Course?  @relation(fields: [courseId], references: [id])
   productId String?
   product   Product? @relation(fields: [productId], references: [id])
+
+  // Ligne « Masterclass » : une place à la session du mois, ni cours ni produit.
+  masterclassId String?
+  masterclass   Masterclass? @relation(fields: [masterclassId], references: [id])
 
   // Ligne « Pack Premium » : ni cours ni produit, elle ouvre tout le catalogue.
   // Un booléen explicite plutôt que deux identifiants nuls, pour que l'octroi des
@@ -465,4 +495,104 @@ model WalletTopup {
 
   @@index([userId, status])
   @@map("wallet_topups")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Masterclass mensuelle — une session par mois, et son historique.
+//
+// La « prochaine Masterclass » n'est JAMAIS un drapeau posé sur une ligne : elle se
+// déduit du calendrier (première session publiée encore à venir). Il n'y a donc rien
+// à remettre à zéro le 1er du mois — le basculement est mécanique, et aucune tâche
+// planifiée manquée ne peut laisser le site sur la session du mois précédent.
+// `Masterclass.monthKey` (« 2026-09 », unique) matérialise ce rattachement mensuel
+// et interdit deux sessions concurrentes sur un même mois.
+//
+// L'inscription réutilise le circuit de paiement des cours : une `Order` porteuse
+// d'un `OrderItem.masterclassId`. La table ci-dessous ne tient que ce que la commande
+// ignore — la présence à la séance.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Masterclass {
+  id String @id @default(cuid())
+
+  /// Mois de rattachement, au format « YYYY-MM », dans le fuseau de Madagascar.
+  /// Unique : une seule Masterclass par mois, c'est la règle du produit.
+  monthKey String @unique
+
+  title       String
+  description String @db.Text
+  /// Nom du formateur, tel qu'annoncé. Volontairement un texte libre et non une
+  /// relation vers `User` : l'intervenant d'une session n'a pas toujours de compte.
+  instructor  String
+
+  /// Date et heure de la séance. Fait autorité sur « à venir » ou « passée ».
+  scheduledAt DateTime
+  /// Durée annoncée (« 2h », « une demi-journée »). Libre, comme celle des cours.
+  duration    String?
+  /// Lieu ou lien de connexion, communiqué dans l'e-mail de confirmation.
+  location    String?
+  coverImage  String?
+
+  price    Decimal  @db.Decimal(10, 2)
+  /// Tarif international, en EUROS ENTIERS (voir `Course.priceEur`).
+  /// NULL = session non proposée hors de Madagascar.
+  priceEur Decimal? @db.Decimal(10, 2)
+
+  /// Nombre de places. NULL = pas de limite annoncée.
+  capacity Int?
+
+  status MasterclassStatus @default(DRAFT)
+
+  registrations MasterclassRegistration[]
+  orderItems    OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, scheduledAt])
+  @@map("masterclasses")
+}
+
+model MasterclassRegistration {
+  id String @id @default(cuid())
+
+  masterclassId String
+  masterclass   Masterclass @relation(fields: [masterclassId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Commande qui règle la place. NULL pour une session offerte, ou tant qu'aucun
+  /// paiement n'a été ouvert. Le STATUT DU PAIEMENT se lit là, jamais ici.
+  ///
+  /// `SetNull` à la suppression : effacer une commande ne doit jamais emporter
+  /// l'inscription — c'est l'historique de participation, pas une écriture comptable.
+  orderId String? @unique
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  status RegistrationStatus @default(PENDING)
+
+  /// Montant et devise réellement facturés, figés à l'inscription : le tarif de la
+  /// session peut changer ensuite, pas ce qui a été payé.
+  amount   Decimal @db.Decimal(10, 2)
+  currency String  @default("MGA")
+
+  registeredAt DateTime  @default(now())
+  confirmedAt  DateTime?
+  cancelledAt  DateTime?
+
+  /// Envoi de l'e-mail de confirmation. Horodatage renseigné = envoyé une fois, et
+  /// une seule : un second sondage de la commande ne doit pas réexpédier le message.
+  /// L'erreur est conservée pour permettre un renvoi depuis la console.
+  confirmationEmailSentAt DateTime?
+  confirmationEmailError  String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Une inscription par personne et par session : la garde qui interdit la double
+  /// inscription, y compris en cas de double clic ou de rejeu réseau.
+  @@unique([masterclassId, userId])
+  @@index([masterclassId, status])
+  @@map("masterclass_registrations")
 }

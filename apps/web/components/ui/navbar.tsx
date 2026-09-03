@@ -13,6 +13,7 @@ import {
     Menu,
     X,
     ArrowRight,
+    Sparkles,
 } from "lucide-react";
 
 export const Navbar = () => {
@@ -34,6 +35,7 @@ export const Navbar = () => {
     const navigation = [
         { name: "Accueil", href: "/" },
         { name: "Catalogue", href: "/courses" },
+        { name: "Masterclass", href: "/masterclass" },
         { name: "Événements", href: "/events" },
         { name: "Boutique", href: "/shop" },
     ];
@@ -73,6 +75,28 @@ export const Navbar = () => {
                 </div>
 
                 <div className="flex items-center gap-4 lg:gap-8">
+
+                    {/*
+                     * CTA permanent : c'est le chemin le plus court vers l'inscription,
+                     * accessible depuis toutes les pages sans avoir à chercher.
+                     */}
+                    <Link
+                        href="/masterclass"
+                        className="hidden xl:flex items-center gap-2 bg-[#2563EB] text-white text-[9px] font-bold uppercase tracking-[0.2em] px-5 py-3 border border-[#2563EB] hover:bg-[#001F3F] hover:border-[#001F3F] transition-all"
+                    >
+                        <Sparkles className="w-3 h-3" />
+                        S'inscrire à la prochaine Masterclass
+                    </Link>
+
+                    {/* Version courte : sous 1280px, l'intitulé complet casserait la barre. */}
+                    <Link
+                        href="/masterclass"
+                        className="hidden sm:flex xl:hidden items-center gap-2 bg-[#2563EB] text-white text-[9px] font-bold uppercase tracking-[0.2em] px-4 py-3 border border-[#2563EB] hover:bg-[#001F3F] hover:border-[#001F3F] transition-all"
+                    >
+                        <Sparkles className="w-3 h-3" />
+                        Masterclass
+                    </Link>
+
                     <Link href="/cart" className="relative p-2 group">
                         <ShoppingCart className="w-5 h-5 text-[#050505] transition-transform group-hover:-translate-y-1" />
                         {cart.length > 0 && (
@@ -151,6 +175,14 @@ export const Navbar = () => {
                     ))}
 
                     <div className="pt-10 border-t border-gray-900 flex flex-col gap-6">
+                        <Link
+                            href="/masterclass"
+                            onClick={() => setIsMenuOpen(false)}
+                            className="flex items-center justify-center gap-2 bg-[#2563EB] text-white text-[11px] font-bold uppercase tracking-[0.2em] px-6 py-5"
+                        >
+                            S'inscrire à la prochaine Masterclass <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+
                         {!user && (
                             <button
                                 onClick={() => { setIsMenuOpen(false); openAuth('signup'); }}

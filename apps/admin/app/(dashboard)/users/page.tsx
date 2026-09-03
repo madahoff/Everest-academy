@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     MoreHorizontal,
@@ -14,6 +14,8 @@ import {
     Loader2,
     X,
     Check,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react"
 import { UserFormDialog } from "@/components/dialogs/user-form-dialog"
 import { MembersBulkEmailDialog } from "@/components/dialogs/members-bulk-email-dialog"
@@ -77,6 +79,82 @@ const SquareCheckbox = ({
     </button>
 )
 
+/** Tailles de page proposées. La première est la valeur par défaut. */
+const PAGE_SIZES = [25, 50, 100, 200]
+
+/**
+ * Navigation entre les pages de l'annuaire.
+ *
+ * Les numéros sont resserrés autour de la page courante : au-delà de quelques
+ * milliers de membres, une barre qui les listerait tous déborderait l'écran.
+ */
+const Pagination = ({
+    page,
+    pageCount,
+    onChange,
+}: {
+    page: number
+    pageCount: number
+    onChange: (page: number) => void
+}) => {
+    if (pageCount <= 1) return null
+
+    const pages: (number | "gap")[] = []
+    for (let candidate = 1; candidate <= pageCount; candidate++) {
+        const near = Math.abs(candidate - page) <= 1
+        const edge = candidate === 1 || candidate === pageCount
+        if (near || edge) {
+            pages.push(candidate)
+        } else if (pages[pages.length - 1] !== "gap") {
+            pages.push("gap")
+        }
+    }
+
+    const arrow = "flex h-9 w-9 items-center justify-center border border-gray-200 text-gray-400 transition-all hover:border-[#050505] hover:text-[#050505] disabled:opacity-30 disabled:hover:border-gray-200 disabled:hover:text-gray-400"
+
+    return (
+        <div className="flex items-center gap-1">
+            <button
+                onClick={() => onChange(page - 1)}
+                disabled={page <= 1}
+                aria-label="Page précédente"
+                className={arrow}
+            >
+                <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            {pages.map((entry, index) =>
+                entry === "gap" ? (
+                    <span key={`gap-${index}`} className="px-1 text-[10px] font-black text-gray-300">
+                        …
+                    </span>
+                ) : (
+                    <button
+                        key={entry}
+                        onClick={() => onChange(entry)}
+                        aria-current={entry === page ? "page" : undefined}
+                        className={`h-9 min-w-9 px-2 text-[10px] font-black tracking-widest transition-all ${entry === page
+                            ? "bg-[#050505] text-white"
+                            : "border border-gray-200 text-gray-400 hover:border-[#050505] hover:text-[#050505]"
+                            }`}
+                    >
+                        {entry}
+                    </button>
+                ),
+            )}
+
+            <button
+                onClick={() => onChange(page + 1)}
+                disabled={page >= pageCount}
+                aria-label="Page suivante"
+                className={arrow}
+            >
+                <ChevronRight className="h-4 w-4" />
+            </button>
+        </div>
+    )
+}
+
 // --- COMPOSANT PRINCIPAL ---
 
 export default function UsersPage() {
@@ -84,6 +162,8 @@ export default function UsersPage() {
 
     const [filters, setFilters] = useState<DirectoryFilters>(EMPTY_FILTERS)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(PAGE_SIZES[0])
 
     const { data: users = [], isLoading, error } = useQuery<DirectoryUser[]>({
         queryKey: ["users"],
@@ -118,6 +198,22 @@ export default function UsersPage() {
 
     const filtered = useMemo(() => filterUsers(users, filters), [users, filters])
 
+    // --- PAGINATION ---
+    // Purement locale : l'annuaire tient déjà en mémoire — c'est ce qui permet aux
+    // filtres et aux actions groupées de porter sur l'ensemble, pas sur une page.
+    // Elle ne découpe donc que l'AFFICHAGE.
+    const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
+
+    // Un filtre qui réduit la liste sous la page courante laisserait un tableau vide :
+    // on revient au début plutôt que d'afficher du néant.
+    useEffect(() => {
+        setPage(1)
+    }, [filters, pageSize])
+
+    const currentPage = Math.min(page, pageCount)
+    const pageStart = (currentPage - 1) * pageSize
+    const paginated = filtered.slice(pageStart, pageStart + pageSize)
+
     // La sélection survit aux changements de filtre — on coche, on affine, on agit —
     // mais jamais à la disparition d'un compte.
     const selectedUsers = useMemo(
@@ -137,13 +233,24 @@ export default function UsersPage() {
     const filteredSelectedCount = filtered.filter((u) => selectedIds.includes(u.id)).length
     const allFilteredSelected = filtered.length > 0 && filteredSelectedCount === filtered.length
 
-    const toggleAllFiltered = () => {
-        const ids = filtered.map((u) => u.id)
+    // La case d'en-tête coche la PAGE affichée : c'est ce que voit l'utilisateur, et
+    // cocher en silence des lignes hors écran serait dangereux devant des actions
+    // groupées qui retirent des accès. L'extension à tout le filtre est proposée
+    // juste en dessous, explicitement.
+    const pageSelectedCount = paginated.filter((u) => selectedIds.includes(u.id)).length
+    const allPageSelected = paginated.length > 0 && pageSelectedCount === paginated.length
+
+    const toggleAllOnPage = () => {
+        const ids = paginated.map((u) => u.id)
         setSelectedIds((current) =>
-            allFilteredSelected
+            allPageSelected
                 ? current.filter((id) => !ids.includes(id))
                 : [...new Set([...current, ...ids])],
         )
+    }
+
+    const selectAllFiltered = () => {
+        setSelectedIds((current) => [...new Set([...current, ...filtered.map((u) => u.id)])])
     }
 
     const toggleOne = (id: string) => {
@@ -335,10 +442,10 @@ export default function UsersPage() {
                             <tr className="bg-[#F9FAFB] border-b border-gray-100">
                                 <th className="px-6 py-5 w-10">
                                     <SquareCheckbox
-                                        checked={allFilteredSelected}
-                                        partial={filteredSelectedCount > 0 && !allFilteredSelected}
-                                        onChange={toggleAllFiltered}
-                                        label="Tout sélectionner"
+                                        checked={allPageSelected}
+                                        partial={pageSelectedCount > 0 && !allPageSelected}
+                                        onChange={toggleAllOnPage}
+                                        label="Sélectionner cette page"
                                     />
                                 </th>
                                 <th className="px-8 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 text-left">Identité Utilisateur</th>
@@ -351,7 +458,7 @@ export default function UsersPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {filtered.map((user) => {
+                            {paginated.map((user) => {
                                 const isSelected = selectedIds.includes(user.id)
                                 return (
                                     <tr
@@ -422,6 +529,53 @@ export default function UsersPage() {
                             })}
                         </tbody>
                     </table>
+                </div>
+            )}
+
+            {/* Extension explicite de la sélection à tout le filtre — jamais implicite. */}
+            {!isLoading && !error && allPageSelected && filtered.length > paginated.length && !allFilteredSelected && (
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2 border border-[#2563EB]/30 bg-[#2563EB]/5 px-6 py-4 text-center">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                        Les {paginated.length} membres de cette page sont sélectionnés.
+                    </span>
+                    <button
+                        onClick={selectAllFiltered}
+                        className="text-[10px] font-black uppercase tracking-widest text-[#2563EB] underline hover:text-[#001F3F]"
+                    >
+                        Sélectionner les {filtered.length} membres filtrés
+                    </button>
+                </div>
+            )}
+
+            {/* Barre de pagination */}
+            {!isLoading && !error && filtered.length > 0 && (
+                <div className="mt-6 flex flex-col gap-4 border-t border-gray-100 pt-6 lg:flex-row lg:items-center lg:justify-between">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                        {pageStart + 1}–{Math.min(pageStart + pageSize, filtered.length)} sur {filtered.length}
+                        {filtered.length !== users.length && ` (${users.length} au total)`}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-300">
+                                Par page
+                            </span>
+                            <select
+                                value={pageSize}
+                                onChange={(e) => setPageSize(Number(e.target.value))}
+                                aria-label="Nombre de membres par page"
+                                className="border border-gray-200 bg-white px-3 py-2 text-[10px] font-black tracking-widest text-[#050505] focus:border-[#2563EB] focus:outline-none"
+                            >
+                                {PAGE_SIZES.map((size) => (
+                                    <option key={size} value={size}>
+                                        {size}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <Pagination page={currentPage} pageCount={pageCount} onChange={setPage} />
+                    </div>
                 </div>
             )}
 

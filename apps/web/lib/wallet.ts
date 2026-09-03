@@ -11,6 +11,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { confirmMasterclassRegistration } from "@/lib/masterclass";
+import { sendMasterclassConfirmation } from "@/lib/masterclass-email";
 import { PREMIUM_PACK_TITLE, getPremiumPlan } from "@/lib/premium";
 import { UNAVAILABLE_ABROAD, methodsFor, resolvePrice, type Currency } from "@/lib/pricing";
 import * as walletApi from "@/lib/wallet-api";
@@ -175,6 +177,8 @@ export async function getWalletSummary(userId: string): Promise<WalletSummary> {
 export interface OrderDraftItem {
     courseId?: string;
     productId?: string;
+    /** Ligne « Masterclass » : une place à la session du mois. */
+    masterclassId?: string;
     /** Ligne « Pack Premium » : ouvre tout le catalogue, ne vise aucun article. */
     isPremiumPack?: boolean;
     title: string;
@@ -384,6 +388,7 @@ export async function createAndPayOrder(input: {
                 create: items.map((item) => ({
                     courseId: item.courseId ?? null,
                     productId: item.productId ?? null,
+                    masterclassId: item.masterclassId ?? null,
                     isPremiumPack: item.isPremiumPack ?? false,
                     title: item.title,
                     amount: item.amount,
@@ -492,10 +497,24 @@ export async function grantOrderAccess(orderId: string): Promise<OrderWithItems>
     try {
         const order = await loadOrder(orderId);
 
+        // Inscriptions à confirmer par un e-mail, collectées pendant la transaction et
+        // notifiées APRÈS : un service de messagerie lent ne tient pas une transaction
+        // de base ouverte, et son échec ne doit rien annuler.
+        const toNotify: string[] = [];
+
         await prisma.$transaction(async (tx) => {
             for (const item of order.items) {
                 if (item.isPremiumPack) {
                     await grantPremiumPack(tx, order.userId);
+                } else if (item.masterclassId) {
+                    const registrationId = await confirmMasterclassRegistration(tx, {
+                        userId: order.userId,
+                        masterclassId: item.masterclassId,
+                        orderId: order.id,
+                        amount: Number(item.amount),
+                        currency: order.currency,
+                    });
+                    if (registrationId) toNotify.push(registrationId);
                 } else if (item.courseId) {
                     const existing = await tx.purchase.findFirst({
                         where: { userId: order.userId, courseId: item.courseId },
@@ -527,6 +546,13 @@ export async function grantOrderAccess(orderId: string): Promise<OrderWithItems>
                 },
             });
         });
+
+        // L'e-mail de confirmation n'est déclenché QUE par ce chemin — celui de
+        // l'encaissement effectif. `sendMasterclassConfirmation` ne lève jamais : une
+        // confirmation non partie laisse une trace sur l'inscription, rien de plus.
+        for (const registrationId of toNotify) {
+            await sendMasterclassConfirmation(registrationId);
+        }
 
         return loadOrder(orderId);
     } catch (error) {
@@ -727,7 +753,15 @@ export interface OrderPayload {
     granted: boolean;
     /** Commande de Pack Premium : tout le catalogue est ouvert, aucun cours à cibler. */
     premium: boolean;
-    items: { courseId: string | null; productId: string | null; title: string; amount: number }[];
+    /** Masterclass réglée par cette commande, s'il y en a une : l'inscription en découle. */
+    masterclassId: string | null;
+    items: {
+        courseId: string | null;
+        productId: string | null;
+        masterclassId: string | null;
+        title: string;
+        amount: number;
+    }[];
     /** Première section du premier cours acheté : où emmener l'apprenant après paiement. */
     firstCourseId: string | null;
     firstSectionId: string | null;
@@ -757,9 +791,11 @@ export async function orderPayload(order: OrderWithItems): Promise<OrderPayload>
         failureReason: order.failureReason,
         granted: order.grantedAt !== null,
         premium: order.items.some((item) => item.isPremiumPack),
+        masterclassId: order.items.find((item) => item.masterclassId)?.masterclassId ?? null,
         items: order.items.map((item) => ({
             courseId: item.courseId,
             productId: item.productId,
+            masterclassId: item.masterclassId,
             title: item.title,
             amount: Number(item.amount),
         })),

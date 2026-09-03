@@ -38,6 +38,9 @@ services:
       - AUTH_TRUST_HOST=true
       - RESEND_API_KEY=${RESEND_API_KEY}
       - EMAIL_FROM=${EMAIL_FROM}
+      # Adresse publique de la vitrine, pour les liens des e-mails de confirmation.
+      - APP_PUBLIC_URL=${WEB_URL}
+      - REPORTING_TIMEZONE=${REPORTING_TIMEZONE:-Indian/Antananarivo}
     volumes:
       - shared_uploads:/app/apps/admin/public/uploads
     ports:
@@ -95,6 +98,11 @@ services:
       # substitution de Compose se termine au premier `}`, et l'URL en contient un.
       - GEO_LOOKUP_URL=${GEO_LOOKUP_URL:-}
       - GEO_FORCE_COUNTRY=${GEO_FORCE_COUNTRY:-}
+      # Masterclass : jeton de la route d'entretien mensuel. Facultatif — la « prochaine
+      # Masterclass » se calcule à chaque requête, un ordonnanceur absent ne fausse rien.
+      - CRON_SECRET=${CRON_SECRET:-}
+      # Fuseau qui décide à quel mois appartient une séance (et les périodes du reporting).
+      - REPORTING_TIMEZONE=${REPORTING_TIMEZONE:-Indian/Antananarivo}
     volumes:
       - shared_uploads:/app/apps/web/public/uploads
     ports:

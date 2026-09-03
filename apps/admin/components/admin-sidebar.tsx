@@ -8,6 +8,7 @@ import {
     Crown,
     LayoutDashboard,
     Package,
+    Sparkles,
     Settings,
     Users,
     Command,
@@ -34,6 +35,7 @@ const menuItems = [
     { title: "Catalogue Cours", url: "/courses", icon: BookOpen, code: "ED-02" },
     { title: "Inventaire Store", url: "/products", icon: Package, code: "SH-03" },
     { title: "Offre Premium", url: "/premium", icon: Crown, code: "PR-04" },
+    { title: "Masterclass", url: "/masterclass", icon: Sparkles, code: "MC-07" },
     { title: "Base Utilisateurs", url: "/users", icon: Users, code: "US-05" },
     { title: "Import Données", url: "/import", icon: FileSpreadsheet, code: "IM-06" },
 ]

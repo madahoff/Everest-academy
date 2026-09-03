@@ -125,16 +125,24 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
         </span>
     );
 
-    const thumbnail = (rounded: string) => (
-        <div className={`relative overflow-hidden bg-gray-100 ${rounded}`}>
+    /**
+     * Vignette de ratio FIXE, quelle que soit la taille réelle du fichier envoyé.
+     *
+     * L'image est positionnée en absolu, et c'est essentiel : en flux normal, une
+     * image haute impose sa hauteur naturelle au conteneur, car `aspect-ratio` cède
+     * devant le contenu au lieu de le contraindre. C'est ce qui faisait qu'un visuel
+     * en portrait rendait sa carte deux fois plus haute que ses voisines.
+     */
+    const thumbnail = (className: string) => (
+        <div className={`relative overflow-hidden bg-gray-100 ${className}`}>
             {course.cardImage ? (
                 <img
                     src={course.cardImage}
                     alt={course.title}
-                    className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 ${hasAccess ? "" : "filter grayscale group-hover:grayscale-0"}`}
+                    className={`absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 ${hasAccess ? "" : "filter grayscale group-hover:grayscale-0"}`}
                 />
             ) : (
-                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
                     <BookOpen className="w-12 h-12 text-gray-400" />
                 </div>
             )}
@@ -155,13 +163,11 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
                 <article className={`group relative bg-white border transition-all duration-300 hover:shadow-xl flex flex-col sm:flex-row gap-0 sm:gap-8 ${hasAccess ? "border-[#2563EB]/40" : "border-gray-200 hover:border-[#001F3F]"}`}>
                     {hasAccess && <span className="absolute left-0 top-0 h-full w-1 bg-[#2563EB]" aria-hidden />}
 
-                    <div className="sm:w-72 shrink-0 aspect-[16/9] sm:aspect-auto sm:h-auto">
-                        {thumbnail("h-full")}
-                    </div>
+                    {thumbnail("aspect-[16/9] w-full sm:w-64 shrink-0")}
 
-                    <div className="flex-1 p-6 sm:py-8 sm:pr-8 sm:pl-0 flex flex-col">
-                        <div className="flex items-start justify-between gap-6 mb-3">
-                            <h3 className="text-xl font-bold text-[#050505] leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[#2563EB] transition-colors">
+                    <div className="flex-1 p-6 sm:pl-0 flex flex-col">
+                        <div className="flex items-start justify-between gap-6 mb-2">
+                            <h3 className="text-lg font-bold text-[#050505] leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[#2563EB] transition-colors">
                                 {course.title}
                             </h3>
                             <span className="flex items-center gap-1 shrink-0">
@@ -170,13 +176,13 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
                             </span>
                         </div>
 
-                        <p className="text-gray-500 text-sm font-light leading-relaxed line-clamp-2 min-h-[3.25em] mb-5">
+                        <p className="text-gray-500 text-[13px] font-light leading-relaxed line-clamp-2 min-h-[3.25em] mb-4">
                             {course.description}
                         </p>
 
-                        <div className="flex items-center gap-x-6 mb-6 h-4 overflow-hidden">{meta}</div>
+                        <div className="flex items-center gap-x-5 mb-4 h-4 overflow-hidden">{meta}</div>
 
-                        <div className="mt-auto pt-5 border-t border-gray-100 flex items-center justify-between gap-6">
+                        <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between gap-6">
                             {priceBlock}
                             {cta}
                         </div>
@@ -192,10 +198,10 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
             <article className={`group relative bg-white border transition-all duration-500 hover:shadow-2xl flex flex-col h-full cursor-pointer ${hasAccess ? "border-[#2563EB]/40" : "border-gray-200 hover:border-[#001F3F]"}`}>
                 {hasAccess && <span className="absolute left-0 top-0 h-1 w-full bg-[#2563EB] z-10" aria-hidden />}
 
-                <div className="aspect-[16/9] shrink-0">{thumbnail("h-full")}</div>
+                {thumbnail("aspect-[16/9] shrink-0")}
 
-                <div className="p-8 flex flex-col flex-grow">
-                    <div className="flex justify-between items-center mb-4">
+                <div className="p-6 flex flex-col flex-grow">
+                    <div className="flex justify-between items-center mb-3">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cours Magistral</span>
                         <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 fill-[#001F3F] text-[#001F3F]" />
@@ -207,17 +213,17 @@ export const StyledCourseCard = ({ course, variant = "grid" }: { course: any; va
                         occupe la même place qu'un titre de deux, sinon la carte se tasse
                         et la grille devient irrégulière. 2.75em = 2 lignes en leading-snug,
                         3.25em = 2 lignes en leading-relaxed. */}
-                    <h3 className="text-xl font-bold text-[#050505] mb-3 leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[#2563EB] transition-colors">
+                    <h3 className="text-lg font-bold text-[#050505] mb-2 leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[#2563EB] transition-colors">
                         {course.title}
                     </h3>
 
-                    <p className="text-gray-500 text-sm mb-5 line-clamp-2 min-h-[3.25em] font-light leading-relaxed">
+                    <p className="text-gray-500 text-[13px] mb-4 line-clamp-2 min-h-[3.25em] font-light leading-relaxed">
                         {course.description}
                     </p>
 
-                    <div className="flex items-center gap-x-5 mb-6 h-4 overflow-hidden">{meta}</div>
+                    <div className="flex items-center gap-x-4 mb-4 h-4 overflow-hidden">{meta}</div>
 
-                    <div className="mt-auto pt-6 border-t border-gray-100 flex items-center justify-between gap-4">
+                    <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between gap-4">
                         {priceBlock}
                         {cta}
                     </div>

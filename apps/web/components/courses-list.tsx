@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { StyledCourseCard } from "@/components/styled-course-card"; // Votre composant existant
 import PremiumPackBanner, { type PremiumOffer } from "@/components/premium-pack-banner";
+import MasterclassSpotlight from "@/components/masterclass-spotlight";
 import { useCurrency } from "@/component/currency-provider";
 import { resolvePrice } from "@/lib/pricing";
 
@@ -198,6 +199,9 @@ function CoursesListContent({ initialCourses, isPremium, premiumOffer }: Courses
                     </div>
                 </div>
             </div>
+
+            {/* --- PROCHAINE MASTERCLASS : la séance du mois, avant le catalogue à la carte --- */}
+            <MasterclassSpotlight variant="light" />
 
             {/* --- PACK PREMIUM : L'OFFRE QUI OUVRE TOUT LE CATALOGUE --- */}
             <PremiumPackBanner
