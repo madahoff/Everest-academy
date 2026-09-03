@@ -2,11 +2,12 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { CalendarPlus, Globe, Loader2 } from "lucide-react"
+import { CalendarPlus, Film, Globe, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FileUpload } from "@/components/ui/file-upload"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { fromLocalInput, monthKeyOf, monthLabel, toLocalInput } from "@/lib/masterclass-month"
 import { parsePriceEur } from "@/lib/pricing"
@@ -21,6 +22,7 @@ export interface MasterclassRow {
     duration: string | null
     location: string | null
     coverImage: string | null
+    presentationVideo: string | null
     price: number
     priceEur: number | null
     capacity: number | null
@@ -44,6 +46,7 @@ interface FormState {
     price: string
     priceEur: string
     capacity: string
+    presentationVideo: string
     status: MasterclassRow["status"]
 }
 
@@ -57,6 +60,7 @@ const EMPTY: FormState = {
     price: "0",
     priceEur: "",
     capacity: "",
+    presentationVideo: "",
     status: "DRAFT",
 }
 
@@ -104,6 +108,7 @@ export function MasterclassFormDialog({
                       price: String(masterclass.price),
                       priceEur: masterclass.priceEur === null ? "" : String(masterclass.priceEur),
                       capacity: masterclass.capacity === null ? "" : String(masterclass.capacity),
+                      presentationVideo: masterclass.presentationVideo ?? "",
                       status: masterclass.status,
                   }
                 : EMPTY,
@@ -144,6 +149,7 @@ export function MasterclassFormDialog({
                     price: Number(form.price) || 0,
                     priceEur: eur.value,
                     capacity: form.capacity.trim() === "" ? null : Number(form.capacity),
+                    presentationVideo: form.presentationVideo,
                     status: form.status,
                 }),
             })
@@ -290,6 +296,43 @@ export function MasterclassFormDialog({
                             />
                             <p className="text-[9px] text-gray-400">Vide = illimité</p>
                         </div>
+                    </div>
+
+                    {/*
+                     * Vidéo de présentation — FACULTATIVE. Deux chemins pour le même champ :
+                     * l'envoi d'un fichier (stocké sur le volume partagé et servi par la
+                     * vitrine avec les Range Requests), ou le collage d'un lien YouTube.
+                     * Le lien reste le chemin recommandé pour une vidéo lourde : il
+                     * n'occupe ni le disque du serveur ni sa bande passante.
+                     */}
+                    <div className="space-y-2">
+                        <Label className={`${label} flex items-center gap-1.5`}>
+                            <Film className="w-3 h-3" /> Vidéo de présentation
+                            <span className="normal-case tracking-normal text-gray-300">— facultative</span>
+                        </Label>
+
+                        <FileUpload
+                            value={form.presentationVideo}
+                            onChange={(url) => set("presentationVideo")(url)}
+                            type="video"
+                            label="Envoyer une vidéo"
+                        />
+
+                        <div className="flex items-center gap-3 pt-1">
+                            <span className="h-px flex-1 bg-gray-100" />
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-300">ou</span>
+                            <span className="h-px flex-1 bg-gray-100" />
+                        </div>
+
+                        <Input
+                            value={form.presentationVideo}
+                            onChange={(e) => set("presentationVideo")(e.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=…"
+                            className={field}
+                        />
+                        <p className="text-[9px] text-gray-400">
+                            Lien YouTube ou fichier MP4/WebM. Vide : aucun lecteur n'est affiché sur le site.
+                        </p>
                     </div>
 
                     <div className="space-y-2">

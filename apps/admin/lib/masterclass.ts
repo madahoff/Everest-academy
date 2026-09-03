@@ -51,6 +51,7 @@ export interface MasterclassInput {
     duration: string | null
     location: string | null
     coverImage: string | null
+    presentationVideo: string | null
     price: number
     priceEur: number | null
     capacity: number | null
@@ -126,6 +127,8 @@ export function parseMasterclassInput(body: unknown): { value: MasterclassInput 
             duration: text(source.duration) || null,
             location: text(source.location) || null,
             coverImage: text(source.coverImage) || null,
+            // Facultative : vidée, la vitrine cesse simplement d'afficher un lecteur.
+            presentationVideo: text(source.presentationVideo) || null,
             price,
             priceEur: eur.value,
             capacity,

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, Clock, Mic, Check, Loader2 } from "lucide-react";
+import { VideoPlayer } from "@/components/video-player";
 import { formatSessionDate, monthLabel } from "@/lib/masterclass-month";
 import { formatAmount, type Currency } from "@/lib/pricing";
 
@@ -16,6 +17,7 @@ export interface MasterclassOfferView {
     duration: string | null;
     location: string | null;
     coverImage: string | null;
+    presentationVideo: string | null;
     currency: Currency;
     price: number | null;
     free: boolean;
@@ -163,6 +165,22 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
                                 </div>
                             ))}
                         </div>
+
+                        {/*
+                         * Vidéo de présentation, quand elle existe. Elle prend place dans la
+                         * colonne éditoriale et non à côté du bouton : elle explique la séance,
+                         * elle ne dispute pas sa place à l'inscription.
+                         *
+                         * `aspect-video` + lecteur en absolu : sans cela, une vidéo verticale
+                         * imposerait sa hauteur naturelle et disloquerait la section.
+                         */}
+                        {offer.presentationVideo && (
+                            <div className="mt-10 relative aspect-video w-full max-w-2xl overflow-hidden border border-gray-800/20 bg-black">
+                                <div className="absolute inset-0">
+                                    <VideoPlayer src={offer.presentationVideo} title={offer.title} />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Bloc tarif / inscription */}

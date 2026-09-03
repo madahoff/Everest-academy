@@ -533,6 +533,11 @@ model Masterclass {
   location    String?
   coverImage  String?
 
+  /// Vidéo de présentation, FACULTATIVE : elle explique ce qui va se passer pendant
+  /// la séance. Fichier envoyé depuis la console ou lien (YouTube) — `VideoPlayer`
+  /// reconnaît les deux. NULL = la vitrine n'affiche simplement aucun lecteur.
+  presentationVideo String?
+
   price    Decimal  @db.Decimal(10, 2)
   /// Tarif international, en EUROS ENTIERS (voir `Course.priceEur`).
   /// NULL = session non proposée hors de Madagascar.

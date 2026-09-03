@@ -15,6 +15,7 @@ import {
     AlertTriangle,
 } from "lucide-react";
 import PaymentMethods from "@/components/payment-methods";
+import { VideoPlayer } from "@/components/video-player";
 import { useAuthModal } from "@/component/auth-modal-provider";
 import { formatSessionDate, monthLabel } from "@/lib/masterclass-month";
 import { priceLabel, type MasterclassState } from "@/components/masterclass-spotlight";
@@ -153,8 +154,31 @@ export default function MasterclassRegistration() {
             <div className="max-w-[1600px] mx-auto px-6 lg:px-12 py-12">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
-                    {/* Informations pratiques */}
-                    <div className="lg:col-span-7 bg-white border border-gray-200 p-8 lg:p-10">
+                    <div className="lg:col-span-7 space-y-10">
+
+                        {/*
+                         * Vidéo de présentation, quand elle existe : elle répond à « qu'est-ce
+                         * qui va se passer ? » à l'endroit exact où la question se pose, juste
+                         * avant les informations pratiques et le règlement.
+                         *
+                         * `aspect-video` + lecteur en absolu : une vidéo verticale imposerait
+                         * sinon sa hauteur naturelle et disloquerait la colonne.
+                         */}
+                        {offer.presentationVideo && (
+                            <div>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400 mb-4">
+                                    La séance en vidéo
+                                </p>
+                                <div className="relative aspect-video w-full overflow-hidden border border-gray-200 bg-black">
+                                    <div className="absolute inset-0">
+                                        <VideoPlayer src={offer.presentationVideo} title={offer.title} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Informations pratiques */}
+                        <div className="bg-white border border-gray-200 p-8 lg:p-10">
                         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400 mb-8">
                             Informations pratiques
                         </p>
@@ -171,6 +195,7 @@ export default function MasterclassRegistration() {
                                 </div>
                             ))}
                         </dl>
+                        </div>
                     </div>
 
                     {/* Inscription */}

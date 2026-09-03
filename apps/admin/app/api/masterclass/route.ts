@@ -30,6 +30,7 @@ function serialize(masterclass: any, nextId: string | null) {
         duration: masterclass.duration,
         location: masterclass.location,
         coverImage: masterclass.coverImage,
+        presentationVideo: masterclass.presentationVideo,
         price: Number(masterclass.price),
         priceEur: masterclass.priceEur === null ? null : Number(masterclass.priceEur),
         capacity: masterclass.capacity,

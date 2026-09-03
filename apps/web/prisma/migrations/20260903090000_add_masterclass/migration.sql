@@ -65,3 +65,7 @@ ALTER TABLE `masterclass_registrations` ADD CONSTRAINT `masterclass_registration
 -- AddForeignKey : effacer une commande ne doit pas emporter l'inscription — c'est
 -- l'historique de participation, pas une écriture comptable.
 ALTER TABLE `masterclass_registrations` ADD CONSTRAINT `masterclass_registrations_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `orders`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Vidéo de présentation de la séance, facultative : fichier envoyé depuis la console
+-- ou lien (YouTube). NULL = aucun lecteur n'est affiché.
+ALTER TABLE `masterclasses` ADD COLUMN `presentationVideo` VARCHAR(191) NULL;

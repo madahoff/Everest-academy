@@ -116,6 +116,8 @@ export interface MasterclassOffer {
     duration: string | null;
     location: string | null;
     coverImage: string | null;
+    /** Vidéo de présentation. `null` : aucun lecteur n'est affiché. */
+    presentationVideo: string | null;
     /** Devise du visiteur : tous les montants de ce bloc y sont exprimés. */
     currency: Currency;
     /** Tarif. `null` : pas de tarif dans cette devise — inscription impossible ici. */
@@ -170,6 +172,7 @@ export async function toOffer(masterclass: Masterclass, currency: Currency): Pro
         duration: masterclass.duration,
         location: masterclass.location,
         coverImage: masterclass.coverImage,
+        presentationVideo: masterclass.presentationVideo,
         currency,
         price: view.free ? 0 : view.amount,
         free: view.free,
