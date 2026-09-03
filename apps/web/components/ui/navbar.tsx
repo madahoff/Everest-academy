@@ -46,7 +46,7 @@ export const Navbar = () => {
         { name: "Accueil", href: "/" },
         { name: "Catalogue", href: "/courses" },
         { name: "Masterclass", href: "/masterclass" },
-        { name: "Événements", href: "/events" },
+        // { name: "Événements", href: "/events" },
         { name: "Boutique", href: "/shop" },
     ];
 
