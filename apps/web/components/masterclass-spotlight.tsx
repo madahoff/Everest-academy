@@ -42,6 +42,8 @@ export interface MasterclassRegistrationView {
 export interface MasterclassState {
     masterclass: MasterclassOfferView | null;
     registration: MasterclassRegistrationView | null;
+    /** Le visiteur détient le Pack Premium : sa place est comprise dans son pack. */
+    isPremium: boolean;
 }
 
 /**
@@ -63,7 +65,7 @@ export function useNextMasterclass() {
             } catch {
                 // Section purement promotionnelle : en cas d'échec elle disparaît,
                 // elle ne montre jamais une erreur au milieu de la page d'accueil.
-                if (!cancelled) setState({ masterclass: null, registration: null });
+                if (!cancelled) setState({ masterclass: null, registration: null, isPremium: false });
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -189,11 +191,17 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
                             }`}
                     >
                         <p className={`text-[10px] font-bold uppercase tracking-[0.3em] mb-3 ${muted}`}>
-                            {offer.free ? "Séance offerte" : "Inscription à la séance"}
+                            {state?.isPremium
+                                ? "Comprise dans votre Pack Premium"
+                                : offer.free
+                                    ? "Séance offerte"
+                                    : "Inscription à la séance"}
                         </p>
 
                         <div className="flex items-end gap-3 mb-6">
-                            <span className="text-5xl font-bold tracking-tighter">{priceLabel(offer)}</span>
+                            <span className="text-5xl font-bold tracking-tighter">
+                                {state?.isPremium ? "Incluse" : priceLabel(offer)}
+                            </span>
                         </div>
 
                         {offer.full && (
@@ -204,7 +212,9 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
                             <div className="flex items-center gap-3 px-5 py-4 border border-[#2563EB] bg-[#2563EB]/10">
                                 <Check className="w-4 h-4 text-[#2563EB] shrink-0" />
                                 <span className="text-xs font-bold uppercase tracking-widest">
-                                    Vous êtes inscrit à cette séance
+                                    {state?.isPremium
+                                        ? "Inscrit via votre Pack Premium"
+                                        : "Vous êtes inscrit à cette séance"}
                                 </span>
                             </div>
                         ) : (

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/require-admin"
-import { parseMasterclassInput, uniqueMonthError } from "@/lib/masterclass"
+import { enrollPremiumMembers, parseMasterclassInput, uniqueMonthError } from "@/lib/masterclass"
 
 export const dynamic = "force-dynamic"
 
@@ -31,7 +31,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         }
 
         const updated = await prisma.masterclass.update({ where: { id }, data: parsed.value })
-        return NextResponse.json({ ...updated, price: Number(updated.price) })
+
+        // Passage en PUBLIÉE (ou modification d'une séance déjà publiée) : les membres
+        // du Pack Premium y sont inscrits d'office. L'appel est idempotent, il peut
+        // donc être fait à chaque enregistrement sans créer de doublon.
+        const enrolled = await enrollPremiumMembers(updated.id)
+
+        return NextResponse.json({ ...updated, price: Number(updated.price), premiumEnrolled: enrolled })
     } catch (error) {
         const conflict = uniqueMonthError(error)
         if (conflict) return NextResponse.json({ error: conflict }, { status: 409 })

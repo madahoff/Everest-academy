@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/require-admin"
 import {
     OCCUPYING_STATUSES,
+    enrollPremiumMembers,
     nextMasterclassId,
     parseMasterclassInput,
     uniqueMonthError,
@@ -89,6 +90,11 @@ export async function POST(request: Request) {
         if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
         const created = await prisma.masterclass.create({ data: parsed.value })
+
+        // Publiée d'emblée : les membres du Pack Premium y sont inscrits d'office —
+        // le pack leur a vendu toutes les Masterclass.
+        await enrollPremiumMembers(created.id)
+
         return NextResponse.json(serialize({ ...created, registrations: [] }, await nextMasterclassId()), {
             status: 201,
         })

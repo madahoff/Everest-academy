@@ -9,6 +9,7 @@ import {
     CalendarDays,
     Check,
     Clock,
+    Crown,
     Loader2,
     Mail,
     Mic,
@@ -47,7 +48,7 @@ export default function MasterclassRegistration() {
             if (!res.ok) throw new Error("unavailable");
             setState((await res.json()) as MasterclassState);
         } catch {
-            setState({ masterclass: null, registration: null });
+            setState({ masterclass: null, registration: null, isPremium: false });
         } finally {
             setLoading(false);
         }
@@ -208,7 +209,14 @@ export default function MasterclassRegistration() {
                                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#2563EB] mb-2">
                                     Inscription confirmée
                                 </p>
-                                <p className="text-2xl font-bold tracking-tight mb-6">Votre place est réservée</p>
+                                <p className="text-2xl font-bold tracking-tight mb-4">Votre place est réservée</p>
+                                {state?.isPremium && (
+                                    <p className="flex items-start gap-3 text-sm text-gray-400 font-light mb-4">
+                                        <Crown className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
+                                        Comprise dans votre Pack Premium : vous êtes inscrit d'office à chaque
+                                        Masterclass, sans rien régler.
+                                    </p>
+                                )}
                                 <p className="flex items-start gap-3 text-sm text-gray-400 font-light">
                                     <Mail className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
                                     {justRegistered
@@ -246,9 +254,15 @@ export default function MasterclassRegistration() {
                         ) : (
                             <>
                                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-3">
-                                    {offer.free ? "Séance offerte" : "Inscription à la séance"}
+                                    {state?.isPremium
+                                        ? "Comprise dans votre Pack Premium"
+                                        : offer.free
+                                            ? "Séance offerte"
+                                            : "Inscription à la séance"}
                                 </p>
-                                <p className="text-5xl font-bold tracking-tighter mb-8">{priceLabel(offer)}</p>
+                                <p className="text-5xl font-bold tracking-tighter mb-8">
+                                    {state?.isPremium ? "Incluse" : priceLabel(offer)}
+                                </p>
 
                                 {failed && (
                                     <div className="flex items-start gap-3 p-4 mb-6 border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-200">
@@ -280,7 +294,7 @@ export default function MasterclassRegistration() {
                                     >
                                         Se connecter pour s'inscrire <ArrowRight className="w-3.5 h-3.5" />
                                     </button>
-                                ) : offer.free ? (
+                                ) : offer.free || state?.isPremium ? (
                                     <button
                                         onClick={claimFreeSeat}
                                         disabled={claiming}
@@ -320,7 +334,7 @@ export default function MasterclassRegistration() {
                                 )}
 
                                 <p className="mt-6 text-[10px] text-gray-600 uppercase tracking-widest text-center">
-                                    {offer.free
+                                    {offer.free || state?.isPremium
                                         ? "Confirmation immédiate par e-mail"
                                         : "Paiement sécurisé · Confirmation par e-mail"}
                                 </p>

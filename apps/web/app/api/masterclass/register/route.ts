@@ -7,12 +7,14 @@ import {
     MasterclassError,
     assertRegistrable,
     buildMasterclassItem,
+    enrollPremiumMember,
     getNextMasterclass,
     getRegistrationView,
     openRegistration,
     registrationLabel,
 } from "@/lib/masterclass";
 import { sendMasterclassConfirmation } from "@/lib/masterclass-email";
+import { isPremiumMember } from "@/lib/premium";
 import { createAndPayOrder, orderPayload } from "@/lib/wallet";
 import { defaultMethodFor, resolvePrice } from "@/lib/pricing";
 import { getRequestCurrency } from "@/lib/request-currency";
@@ -70,15 +72,23 @@ export async function POST(request: Request) {
             include: { order: { select: { status: true } } },
         });
 
-        await assertRegistrable(masterclass, existing);
+        // Résolu avant les gardes : le pack lève la jauge, et dispense du paiement.
+        const premium = await isPremiumMember(userId);
 
-        // Session offerte : rien à encaisser, donc aucune commande à ouvrir. La place
-        // est acquise sur-le-champ et la confirmation part immédiatement.
+        await assertRegistrable(masterclass, existing, { premium });
+
+        // Séance offerte, OU membre du Pack Premium — qui a déjà payé toutes les
+        // Masterclass. Dans les deux cas il n'y a rien à encaisser : aucune commande
+        // n'est ouverte, la place est acquise sur-le-champ.
+        //
+        // Cette garde est la seule qui compte pour tenir la promesse du pack : elle
+        // vaut quelle que soit la façon dont le plan a été accordé — achat, ou
+        // basculement manuel depuis la console.
         const view = resolvePrice(
             { price: String(masterclass.price), priceEur: masterclass.priceEur?.toString() },
             currency,
         );
-        if (view.free) {
+        if (view.free || premium) {
             const registration = await prisma.masterclassRegistration.upsert({
                 where: { masterclassId_userId: { masterclassId: masterclass.id, userId } },
                 create: {
@@ -91,6 +101,12 @@ export async function POST(request: Request) {
                 },
                 update: { status: "CONFIRMED", amount: 0, currency, confirmedAt: new Date(), cancelledAt: null },
             });
+
+            // Membre Premium : tant qu'à le traiter, on l'inscrit aux autres séances
+            // déjà programmées — c'est ce que le pack lui a vendu.
+            if (premium) {
+                await prisma.$transaction((tx) => enrollPremiumMember(tx, userId));
+            }
 
             if (!registration.confirmationEmailSentAt) {
                 await sendMasterclassConfirmation(registration.id);

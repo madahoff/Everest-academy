@@ -11,7 +11,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { confirmMasterclassRegistration } from "@/lib/masterclass";
+import { confirmMasterclassRegistration, enrollPremiumMember } from "@/lib/masterclass";
 import { sendMasterclassConfirmation } from "@/lib/masterclass-email";
 import { PREMIUM_PACK_TITLE, getPremiumPlan } from "@/lib/premium";
 import { UNAVAILABLE_ABROAD, methodsFor, resolvePrice, type Currency } from "@/lib/pricing";
@@ -505,7 +505,9 @@ export async function grantOrderAccess(orderId: string): Promise<OrderWithItems>
         await prisma.$transaction(async (tx) => {
             for (const item of order.items) {
                 if (item.isPremiumPack) {
-                    await grantPremiumPack(tx, order.userId);
+                    // Le pack ouvre aussi les Masterclass : les inscriptions créées ici
+                    // sont notifiées comme les autres, plus bas.
+                    toNotify.push(...(await grantPremiumPack(tx, order.userId)));
                 } else if (item.masterclassId) {
                     const registrationId = await confirmMasterclassRegistration(tx, {
                         userId: order.userId,
@@ -570,13 +572,19 @@ export async function grantOrderAccess(orderId: string): Promise<OrderWithItems>
  * les `Purchase` — « mes cours » du profil, les certifications, le panier. On matérialise
  * donc l'existant, et le plan prend le relais pour les cours publiés ensuite.
  *
+ * Le pack couvre également les MASTERCLASS : l'acheteur est inscrit d'office à toutes
+ * les séances déjà programmées. Celles publiées ensuite sont couvertes à leur
+ * publication, depuis la console.
+ *
  * `salesCount` n'est pas incrémenté : ce compteur mesure les ventes d'un cours, et le
  * pack n'en est pas une.
+ *
+ * Retourne les inscriptions Masterclass créées, à notifier hors transaction.
  */
 async function grantPremiumPack(
     tx: Prisma.TransactionClient,
     userId: string,
-): Promise<void> {
+): Promise<string[]> {
     await tx.user.update({
         where: { id: userId },
         data: { plan: "PREMIUM", premiumSince: new Date() },
@@ -598,6 +606,8 @@ async function grantPremiumPack(
 
     // Plus rien à régler à l'unité : le panier n'aurait plus de sens.
     await tx.cartItem.deleteMany({ where: { userId, courseId: { not: null } } });
+
+    return enrollPremiumMember(tx, userId);
 }
 
 async function loadOrder(orderId: string): Promise<OrderWithItems> {

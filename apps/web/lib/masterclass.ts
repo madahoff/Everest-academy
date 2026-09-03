@@ -258,12 +258,15 @@ export function registrationLabel(masterclass: Masterclass): string {
  * `existing` est l'inscription éventuelle du visiteur : une inscription ANNULÉE, ou
  * restée en attente sur un paiement échoué, ne bloque pas une nouvelle tentative —
  * c'est le cas normal de quelqu'un qui a abandonné puis revient.
+ *
+ * `premium` lève la seule garde qui ne s'applique pas à un membre du pack : la jauge.
  */
 export async function assertRegistrable(
     masterclass: Masterclass,
     existing: (MasterclassRegistration & { order: { status: string } | null }) | null,
-    now: Date = new Date(),
+    options: { premium?: boolean; now?: Date } = {},
 ): Promise<void> {
+    const now = options.now ?? new Date();
     if (masterclass.status !== "PUBLISHED") {
         throw new MasterclassError("masterclass_unavailable", 409, "Cette Masterclass n'est pas ouverte aux inscriptions");
     }
@@ -285,7 +288,9 @@ export async function assertRegistrable(
         );
     }
 
-    if (masterclass.capacity !== null) {
+    // La jauge n'est pas opposée à un membre Premium : sa place lui a été vendue avec
+    // le pack, elle ne peut pas lui être refusée parce que la séance affiche complet.
+    if (masterclass.capacity !== null && !options.premium) {
         const occupied = await countOccupied(masterclass.id);
         if (occupied >= masterclass.capacity) {
             throw new MasterclassError("masterclass_full", 409, "Cette Masterclass affiche complet");
@@ -315,6 +320,75 @@ export async function openRegistration(input: {
         // en conservant la ligne — sa date d'origine reste l'historique du premier essai.
         update: { amount, currency, status: "PENDING", cancelledAt: null, orderId: null },
     });
+}
+
+// ─── Pack Premium ─────────────────────────────────────────────────────────────
+//
+// Le Pack Premium ouvre TOUTES les Masterclass, sans paiement à la séance. Comme
+// pour le catalogue de cours, la promesse est tenue par deux mécanismes qui ne font
+// pas double emploi :
+//
+//  - à l'achat, on MATÉRIALISE l'inscription aux séances déjà programmées, pour que
+//    le membre figure immédiatement dans la liste des inscrits de la console ;
+//  - à la publication d'une nouvelle séance, la console inscrit les membres
+//    existants (voir `lib/masterclass.ts` côté admin).
+//
+// Une troisième garde, dans la route d'inscription, couvre tout le reste : un membre
+// Premium ne se voit JAMAIS réclamer un paiement pour une Masterclass, quelle que
+// soit la façon dont son plan lui a été accordé.
+
+/**
+ * Devise portée par une inscription offerte. Aucun montant n'étant facturé, elle ne
+ * sert qu'à ce que la colonne ne reste pas vide — l'ariary est la devise de référence.
+ */
+const FREE_REGISTRATION_CURRENCY = "MGA";
+
+/**
+ * Inscrit un membre Premium à toutes les séances à venir auxquelles il ne l'est pas
+ * encore. Idempotent — `skipDuplicates` s'appuie sur la contrainte d'unicité.
+ *
+ * La JAUGE N'EST PAS OPPOSÉE à un membre Premium : sa place lui a été vendue avec le
+ * pack, elle ne peut pas lui être refusée parce que la séance affiche complet. Le
+ * nombre de places annoncé doit donc être dimensionné en conséquence.
+ *
+ * Retourne les inscriptions créées, pour que l'appelant décide de les notifier.
+ */
+export async function enrollPremiumMember(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    now: Date = new Date(),
+): Promise<string[]> {
+    const upcoming = await tx.masterclass.findMany({
+        where: { status: "PUBLISHED", scheduledAt: { gte: now } },
+        select: { id: true },
+    });
+    if (upcoming.length === 0) return [];
+
+    const existing = await tx.masterclassRegistration.findMany({
+        where: { userId, masterclassId: { in: upcoming.map((m) => m.id) } },
+        select: { masterclassId: true },
+    });
+    const known = new Set(existing.map((r) => r.masterclassId));
+    const missing = upcoming.filter((m) => !known.has(m.id));
+    if (missing.length === 0) return [];
+
+    await tx.masterclassRegistration.createMany({
+        data: missing.map((masterclass) => ({
+            masterclassId: masterclass.id,
+            userId,
+            amount: 0,
+            currency: FREE_REGISTRATION_CURRENCY,
+            status: "CONFIRMED" as const,
+            confirmedAt: now,
+        })),
+        skipDuplicates: true,
+    });
+
+    const created = await tx.masterclassRegistration.findMany({
+        where: { userId, masterclassId: { in: missing.map((m) => m.id) } },
+        select: { id: true },
+    });
+    return created.map((r) => r.id);
 }
 
 /**

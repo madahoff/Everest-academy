@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { getNextMasterclass, getRegistrationView, rolloverIfDue, toOffer } from "@/lib/masterclass";
+import { isPremiumMember } from "@/lib/premium";
 import { getRequestCurrency } from "@/lib/request-currency";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +25,16 @@ export async function GET() {
 
     const masterclass = await getNextMasterclass();
     if (!masterclass) {
-        return NextResponse.json({ masterclass: null, registration: null });
+        return NextResponse.json({ masterclass: null, registration: null, isPremium: false });
     }
 
-    const [offer, registration] = await Promise.all([
+    const [offer, registration, isPremium] = await Promise.all([
         toOffer(masterclass, currency),
         getRegistrationView(masterclass.id, session?.user?.id),
+        isPremiumMember(session?.user?.id),
     ]);
 
-    return NextResponse.json({ masterclass: offer, registration });
+    // `isPremium` ne change RIEN au droit de s'inscrire — la route d'inscription le
+    // relit elle-même. Il ne sert qu'à dire au membre d'où lui vient sa place.
+    return NextResponse.json({ masterclass: offer, registration, isPremium });
 }

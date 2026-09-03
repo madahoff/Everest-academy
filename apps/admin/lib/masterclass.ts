@@ -137,6 +137,56 @@ export function parseMasterclassInput(body: unknown): { value: MasterclassInput 
     }
 }
 
+/**
+ * Inscrit d'office tous les membres du Pack Premium à une séance PUBLIÉE.
+ *
+ * Le pack ouvre toutes les Masterclass : à l'achat, la vitrine inscrit son acheteur
+ * aux séances déjà programmées ; ici, on couvre le sens inverse — une séance publiée
+ * APRÈS l'achat. Les deux ensemble tiennent la promesse quel que soit l'ordre des
+ * événements.
+ *
+ * Idempotent (`skipDuplicates` s'appuie sur la contrainte d'unicité), et sans effet
+ * sur une séance en brouillon ou archivée. La jauge n'est pas opposée : la place d'un
+ * membre Premium lui a été vendue avec le pack.
+ *
+ * AUCUN E-MAIL n'est envoyé : une publication déclencherait sinon un envoi en masse
+ * au milieu d'une requête HTTP. La console permet de le faire ligne par ligne.
+ */
+export async function enrollPremiumMembers(masterclassId: string): Promise<number> {
+    const masterclass = await prisma.masterclass.findUnique({
+        where: { id: masterclassId },
+        select: { status: true, scheduledAt: true },
+    })
+
+    if (!masterclass || masterclass.status !== "PUBLISHED") return 0
+    // Une séance déjà tenue n'inscrit plus personne, fût-il Premium.
+    if (masterclass.scheduledAt.getTime() < Date.now()) return 0
+
+    const [members, existing] = await Promise.all([
+        prisma.user.findMany({ where: { plan: "PREMIUM" }, select: { id: true } }),
+        prisma.masterclassRegistration.findMany({ where: { masterclassId }, select: { userId: true } }),
+    ])
+
+    const known = new Set(existing.map((r) => r.userId))
+    const missing = members.filter((member) => !known.has(member.id))
+    if (missing.length === 0) return 0
+
+    const now = new Date()
+    const created = await prisma.masterclassRegistration.createMany({
+        data: missing.map((member) => ({
+            masterclassId,
+            userId: member.id,
+            amount: 0,
+            currency: "MGA",
+            status: "CONFIRMED" as const,
+            confirmedAt: now,
+        })),
+        skipDuplicates: true,
+    })
+
+    return created.count
+}
+
 /** Traduit une collision de clé unique Prisma en message lisible. */
 export function uniqueMonthError(error: unknown): string | null {
     const code = (error as { code?: string })?.code

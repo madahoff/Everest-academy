@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, Crown, Infinity as InfinityIcon, Lock, ShieldCheck, Sparkles, X, ArrowRight } from "lucide-react";
+import { CalendarCheck, Check, Crown, Infinity as InfinityIcon, Lock, Sparkles, X, ArrowRight } from "lucide-react";
 import PaymentMethods from "@/components/payment-methods";
 import { useAuthModal } from "@/component/auth-modal-provider";
 import { formatAmount, type Currency } from "@/lib/pricing";
@@ -28,7 +28,12 @@ export interface PremiumOffer {
 const ARGUMENTS = [
     { icon: Lock, label: "Tout le catalogue débloqué", detail: "Chaque module premium, immédiatement" },
     { icon: InfinityIcon, label: "Accès à vie", detail: "Aucun abonnement, aucun renouvellement" },
-    { icon: Sparkles, label: "Modules à venir inclus", detail: "Les prochaines MasterClass s'ajoutent seules" },
+    {
+        icon: CalendarCheck,
+        label: "Masterclass mensuelles incluses",
+        detail: "Inscription automatique à chaque séance, sans rien régler",
+    },
+    { icon: Sparkles, label: "Modules à venir inclus", detail: "Les prochains modules s'ajoutent seuls" },
 ];
 
 /**
@@ -72,6 +77,9 @@ export default function PremiumPackBanner({
                             </p>
                             <p className="text-lg font-bold">
                                 {unlockedCount} module{unlockedCount > 1 ? "s" : ""} débloqué{unlockedCount > 1 ? "s" : ""} — accès à vie
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                Masterclass mensuelles comprises : vous y êtes inscrit d'office.
                             </p>
                         </div>
                     </div>
@@ -226,6 +234,9 @@ export default function PremiumPackBanner({
                                         upcoming > 0
                                             ? `${offer.courseCount} déjà ouvertes, ${upcoming} à venir`
                                             : "Mises à jour et nouveaux modules inclus",
+                                        // La promesse est tenue par le code : l'achat inscrit aux séances
+                                        // déjà programmées, leur publication inscrit les membres existants.
+                                        "Inscription automatique à toutes les Masterclass",
                                         "Accès à vie, sans abonnement",
                                     ].map((item) => (
                                         <li key={item} className="flex items-center gap-3 text-xs text-gray-300">
