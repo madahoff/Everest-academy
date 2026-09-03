@@ -19,9 +19,12 @@ import {
     AlertTriangle,
     CheckCircle,
     ChevronRight,
-    Wallet
+    Wallet,
+    Sparkles,
+    CalendarCheck
 } from "lucide-react"
 import DeleteAccountSection from "@/components/delete-account-section"
+import { formatSessionDate } from "@/lib/masterclass-month"
 import ProfileWalletCard from "@/components/profile-wallet-card"
 
 // --- COMPOSANTS UI INTERNES ---
@@ -70,6 +73,14 @@ export default async function Profile() {
             favorites: {
                 include: { course: true },
                 orderBy: { createdAt: 'desc' }
+            },
+            // Les inscriptions ANNULÉES sont écartées : ce ne sont plus « mes
+            // Masterclass ». Elles restent visibles dans la console, qui tient
+            // l'historique complet.
+            masterclassRegistrations: {
+                where: { status: { not: 'CANCELLED' } },
+                include: { masterclass: true },
+                orderBy: { masterclass: { scheduledAt: 'desc' } }
             }
         }
     })
@@ -84,9 +95,17 @@ export default async function Profile() {
     const walletBalance = parseFloat(dbUser.walletBalance?.toString() || "0")
     const joinDate = new Date(dbUser.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 
+    // Places réellement tenues : une inscription encore en attente de paiement n'en
+    // est pas une, et la compter gonflerait un chiffre que le membre lit comme un acquis.
+    const registrations = dbUser.masterclassRegistrations
+    const masterclassCount = registrations.filter(
+        (r: any) => r.status === 'CONFIRMED' || r.status === 'ATTENDED'
+    ).length
+    const now = new Date()
+
     const stats = [
         { label: "Cours acquis", value: totalCourses, icon: BookOpen, color: "text-[#001F3F]" },
-
+        { label: "Masterclass", value: masterclassCount, icon: Sparkles, color: "text-[#2563EB]" },
         { label: "Certifications", value: 0, icon: Award, color: "text-[#2563EB]" },
         { label: "Temps d'étude", value: `0h`, icon: Star, color: "text-amber-500" }
     ];
@@ -189,6 +208,103 @@ export default async function Profile() {
                                             </div>
                                         )
                                     ))
+                                )}
+                            </div>
+                        </section>
+
+                        {/*
+                          * Mes Masterclass — même dessin que « Mes Cours Disponibles ».
+                          * Toute la ligne est cliquable et mène au détail de la séance :
+                          * c'est ce qui rend l'accès direct, sans passer par le catalogue.
+                          */}
+                        <section>
+                            <h2 className="text-sm font-bold uppercase tracking-[0.3em] mb-8 flex items-center gap-4">
+                                Mes Masterclass <span className="h-[1px] flex-1 bg-gray-100"></span>
+                            </h2>
+
+                            <div className="space-y-4">
+                                {registrations.length === 0 ? (
+                                    <div className="text-center py-10 bg-white border border-gray-100">
+                                        <Sparkles className="w-10 h-10 mx-auto text-gray-300 mb-4" />
+                                        <p className="text-xs text-gray-400 font-bold uppercase mb-6">
+                                            Aucune Masterclass pour le moment
+                                        </p>
+                                        {/* L'état vide n'est pas un cul-de-sac : il mène à l'inscription. */}
+                                        <a href="/masterclass" className="inline-block">
+                                            <Button variant="premium" size="sm">
+                                                <Sparkles className="w-3 h-3" /> S'inscrire à la prochaine Masterclass
+                                            </Button>
+                                        </a>
+                                    </div>
+                                ) : (
+                                    registrations.map((registration: any) => {
+                                        const masterclass = registration.masterclass
+                                        const upcoming = new Date(masterclass.scheduledAt) >= now
+                                        // Une inscription en attente n'est pas une place acquise :
+                                        // le membre doit lire qu'il lui reste un paiement à finir.
+                                        const awaitingPayment = registration.status === 'PENDING'
+
+                                        return (
+                                            <a
+                                                key={registration.id}
+                                                href={`/masterclass/${masterclass.id}`}
+                                                className="group bg-white border border-gray-100 p-6 flex flex-col md:flex-row justify-between items-center gap-6 hover:border-[#2563EB] transition-all"
+                                            >
+                                                <div className="flex items-center gap-6">
+                                                    <div className="w-16 h-16 bg-gray-50 flex-shrink-0 relative overflow-hidden flex items-center justify-center">
+                                                        {masterclass.coverImage ? (
+                                                            <img src={masterclass.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Sparkles className="w-6 h-6 text-gray-300" />
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex flex-wrap items-center gap-3 mb-1">
+                                                            <h3 className="font-bold text-[#050505] uppercase text-sm group-hover:text-[#2563EB]">
+                                                                {masterclass.title}
+                                                            </h3>
+                                                            {awaitingPayment ? (
+                                                                <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest border border-amber-300 text-amber-600">
+                                                                    Paiement à finir
+                                                                </span>
+                                                            ) : upcoming ? (
+                                                                <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest border border-[#2563EB] text-[#2563EB]">
+                                                                    À venir
+                                                                </span>
+                                                            ) : registration.status === 'ATTENDED' ? (
+                                                                <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest border border-green-500 text-green-600">
+                                                                    Participé
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest border border-gray-200 text-gray-400">
+                                                                    Passée
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-gray-400">
+                                                            {formatSessionDate(masterclass.scheduledAt)} · {masterclass.instructor}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                {/*
+                                                  * Rendu en <span> et non en <button> : toute la ligne est déjà le
+                                                  * lien, et imbriquer un bouton dans un lien est du HTML invalide
+                                                  * qui avale le clic sur certains navigateurs.
+                                                  */}
+                                                <div className="w-full md:w-auto">
+                                                    <span
+                                                        className={`font-bold uppercase tracking-widest transition-all duration-300 rounded-none border flex items-center justify-center gap-2 px-4 py-2 text-[10px] ${awaitingPayment
+                                                            ? "bg-[#2563EB] text-white border-[#2563EB] group-hover:bg-[#001F3F] group-hover:border-[#001F3F]"
+                                                            : "bg-transparent border-gray-200 text-[#001F3F] group-hover:border-[#001F3F]"
+                                                            }`}
+                                                    >
+                                                        {awaitingPayment ? "Terminer l'inscription" : "Voir le détail"}
+                                                        <ChevronRight className="w-3 h-3" />
+                                                    </span>
+                                                </div>
+                                            </a>
+                                        )
+                                    })
                                 )}
                             </div>
                         </section>

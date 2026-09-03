@@ -24,14 +24,20 @@ import { priceLabel, type MasterclassState } from "@/components/masterclass-spot
 const CONFIRMED_STATUSES = ["CONFIRMED", "ATTENDED"];
 
 /**
- * Parcours d'inscription à la prochaine Masterclass.
+ * Détail d'une Masterclass, et son parcours d'inscription.
+ *
+ * Sans `masterclassId`, l'écran présente la PROCHAINE séance — c'est la page
+ * `/masterclass`, où mènent la navbar et les bandeaux. Avec un identifiant, il
+ * présente CETTE séance-là, passée y compris : c'est `/masterclass/:id`, où mène le
+ * profil. Un seul composant pour les deux, faute de quoi le détail d'une séance
+ * s'écrirait deux fois et divergerait.
  *
  * Le règlement est celui du reste du site : `PaymentMethods` appelle
  * `/api/masterclass/register`, qui ouvre une commande ordinaire. Cet écran ne
  * connaît donc ni le solde, ni Vanilla Pay, ni l'octroi de la place — seulement
  * l'issue.
  */
-export default function MasterclassRegistration() {
+export default function MasterclassRegistration({ masterclassId }: { masterclassId?: string } = {}) {
     const { data: session } = useSession();
     const { openAuth } = useAuthModal();
 
@@ -42,9 +48,14 @@ export default function MasterclassRegistration() {
     const [claiming, setClaiming] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    /** Chemin de cet écran, où ramener le payeur au retour de Vanilla Pay. */
+    const pagePath = masterclassId ? `/masterclass/${masterclassId}` : "/masterclass";
+
     const load = useCallback(async () => {
         try {
-            const res = await fetch("/api/masterclass", { cache: "no-store" });
+            const res = await fetch(masterclassId ? `/api/masterclass/${masterclassId}` : "/api/masterclass", {
+                cache: "no-store",
+            });
             if (!res.ok) throw new Error("unavailable");
             setState((await res.json()) as MasterclassState);
         } catch {
@@ -52,7 +63,7 @@ export default function MasterclassRegistration() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [masterclassId]);
 
     useEffect(() => {
         void load();
@@ -66,7 +77,7 @@ export default function MasterclassRegistration() {
             const res = await fetch("/api/masterclass/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ returnPath: "/masterclass" }),
+                body: JSON.stringify({ returnPath: pagePath }),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -100,17 +111,21 @@ export default function MasterclassRegistration() {
                 <div className="max-w-3xl mx-auto px-6 text-center">
                     <CalendarDays className="w-12 h-12 mx-auto text-gray-300 mb-6" />
                     <h1 className="text-3xl font-bold tracking-tight mb-4">
-                        La prochaine Masterclass n'est pas encore annoncée
+                        {masterclassId
+                            ? "Cette Masterclass est introuvable"
+                            : "La prochaine Masterclass n'est pas encore annoncée"}
                     </h1>
                     <p className="text-gray-500 font-light mb-10">
-                        Une nouvelle séance est programmée chaque mois. Revenez d'ici quelques jours, ou parcourez le
-                        catalogue en attendant.
+                        {masterclassId
+                            ? "La séance demandée n'existe plus, ou n'est pas publiée."
+                            : "Une nouvelle séance est programmée chaque mois. Revenez d'ici quelques jours, ou parcourez le catalogue en attendant."}
                     </p>
                     <Link
-                        href="/courses"
+                        href={masterclassId ? "/masterclass" : "/courses"}
                         className="inline-flex items-center gap-2 px-8 py-4 bg-[#001F3F] text-white text-xs font-bold uppercase tracking-widest hover:bg-[#2563EB] transition-colors"
                     >
-                        Voir le catalogue <ArrowRight className="w-3.5 h-3.5" />
+                        {masterclassId ? "Voir la prochaine Masterclass" : "Voir le catalogue"}
+                        <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                 </div>
             </div>
@@ -201,7 +216,27 @@ export default function MasterclassRegistration() {
 
                     {/* Inscription */}
                     <div className="lg:col-span-5 bg-[#050505] text-white p-8 lg:p-10 border border-gray-800">
-                        {registered ? (
+                        {offer.past ? (
+                            <>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-3">
+                                    Séance passée
+                                </p>
+                                <p className="text-2xl font-bold tracking-tight mb-4">
+                                    {registered ? "Vous y avez participé" : "Cette séance a eu lieu"}
+                                </p>
+                                <p className="text-sm text-gray-400 font-light">
+                                    {registered
+                                        ? "Cette Masterclass fait partie de votre parcours. Retrouvez-en le détail ci-contre."
+                                        : "Les inscriptions à cette séance sont closes."}
+                                </p>
+                                <Link
+                                    href="/masterclass"
+                                    className="mt-8 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/70 hover:text-white transition-colors"
+                                >
+                                    Voir la prochaine Masterclass <ArrowRight className="w-3 h-3" />
+                                </Link>
+                            </>
+                        ) : registered ? (
                             <>
                                 <div className="w-12 h-12 bg-[#2563EB] flex items-center justify-center mb-6">
                                     <Check className="w-5 h-5" />
@@ -309,8 +344,8 @@ export default function MasterclassRegistration() {
                                         amount={offer.price as number}
                                         currency={offer.currency}
                                         label={`Masterclass — ${offer.title}`}
-                                        returnPath="/masterclass"
-                                        loginCallbackUrl="/masterclass"
+                                        returnPath={pagePath}
+                                        loginCallbackUrl={pagePath}
                                         dark
                                         onPaid={async () => {
                                             setCheckout(false);

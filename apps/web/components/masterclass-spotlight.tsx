@@ -25,6 +25,8 @@ export interface MasterclassOfferView {
     seatsLeft: number | null;
     confirmedCount: number;
     full: boolean;
+    /** Séance déjà tenue : elle se consulte, elle ne s'ouvre plus aux inscriptions. */
+    past: boolean;
 }
 
 export interface MasterclassRegistrationView {

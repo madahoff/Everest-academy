@@ -55,6 +55,20 @@ export async function getNextMasterclass(now: Date = new Date()): Promise<Master
 }
 
 /**
+ * Une séance précise, désignée par son identifiant.
+ *
+ * Les BROUILLONS sont exclus : une séance en préparation n'a pas d'adresse publique,
+ * et son identifiant ne doit pas suffire à la faire apparaître. Les séances ARCHIVÉES,
+ * elles, restent consultables — c'est ce qui permet à un membre de retrouver le détail
+ * d'une Masterclass à laquelle il a participé.
+ */
+export async function getMasterclassById(id: string): Promise<Masterclass | null> {
+    return prisma.masterclass.findFirst({
+        where: { id, status: { in: ["PUBLISHED", "ARCHIVED"] } },
+    });
+}
+
+/**
  * Archive les sessions publiées dont la date est passée.
  *
  * Idempotent et sans effet sur les inscriptions : l'historique est précisément ce
@@ -129,6 +143,8 @@ export interface MasterclassOffer {
     seatsLeft: number | null;
     confirmedCount: number;
     full: boolean;
+    /** Séance déjà tenue : elle se consulte, elle ne s'ouvre plus aux inscriptions. */
+    past: boolean;
 }
 
 /** État de l'inscription du visiteur à cette session. */
@@ -180,6 +196,7 @@ export async function toOffer(masterclass: Masterclass, currency: Currency): Pro
         seatsLeft,
         confirmedCount,
         full: seatsLeft !== null && seatsLeft <= 0,
+        past: masterclass.scheduledAt.getTime() < Date.now(),
     };
 }
 
