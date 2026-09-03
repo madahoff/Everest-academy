@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Clock, MapPin, Mic, Users, Check, Loader2 } from "lucide-react";
+import { ArrowRight, CalendarDays, Clock, Mic, Check, Loader2 } from "lucide-react";
 import { formatSessionDate, monthLabel } from "@/lib/masterclass-month";
 import { formatAmount, type Currency } from "@/lib/pricing";
 
@@ -117,11 +117,12 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
     const shell = dark ? "bg-[#050505] text-white" : "bg-white text-[#050505] border-y border-gray-200";
     const muted = dark ? "text-gray-400" : "text-gray-500";
 
+    // Le lieu n'est pas annoncé sur la vitrine : il est communiqué à l'inscrit, dans
+    // l'e-mail de confirmation.
     const facts = [
         { icon: CalendarDays, label: formatSessionDate(offer.scheduledAt) },
         ...(offer.duration ? [{ icon: Clock, label: offer.duration }] : []),
         { icon: Mic, label: offer.instructor },
-        ...(offer.location ? [{ icon: MapPin, label: offer.location }] : []),
     ];
 
     return (
@@ -177,14 +178,8 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
                             <span className="text-5xl font-bold tracking-tighter">{priceLabel(offer)}</span>
                         </div>
 
-                        {offer.seatsLeft !== null && (
-                            <p className={`flex items-center gap-2 text-xs mb-6 ${muted}`}>
-                                <Users className="w-3.5 h-3.5 text-[#2563EB]" />
-                                {offer.full
-                                    ? "Complet"
-                                    : `${offer.seatsLeft} place${offer.seatsLeft > 1 ? "s" : ""} restante${offer.seatsLeft > 1 ? "s" : ""
-                                    } sur ${offer.capacity}`}
-                            </p>
+                        {offer.full && (
+                            <p className={`text-xs mb-6 font-bold uppercase tracking-widest ${muted}`}>Complet</p>
                         )}
 
                         {registered ? (
@@ -205,7 +200,7 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
                         )}
 
                         <p className={`mt-4 text-[10px] uppercase tracking-widest text-center ${muted}`}>
-                            {offer.free ? "Places limitées · Confirmation par e-mail" : "Solde · Mobile Money · Carte bancaire"}
+                            {offer.free ? "Confirmation par e-mail" : "Solde · Mobile Money · Carte bancaire"}
                         </p>
                     </div>
                 </div>

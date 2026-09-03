@@ -11,9 +11,7 @@ import {
     Clock,
     Loader2,
     Mail,
-    MapPin,
     Mic,
-    Users,
     AlertTriangle,
 } from "lucide-react";
 import PaymentMethods from "@/components/payment-methods";
@@ -123,11 +121,12 @@ export default function MasterclassRegistration() {
     const failed = registration?.status === "PENDING" && registration.orderStatus === "FAILED";
     const unavailable = !offer.free && offer.price === null;
 
+    // Ni le lieu ni la jauge ne sont annoncés ici : le premier est communiqué à
+    // l'inscrit dans l'e-mail de confirmation, la seconde ne regarde que la console.
     const facts = [
         { icon: CalendarDays, label: "Date", value: formatSessionDate(offer.scheduledAt) },
         ...(offer.duration ? [{ icon: Clock, label: "Durée", value: offer.duration }] : []),
         { icon: Mic, label: "Formateur", value: offer.instructor },
-        ...(offer.location ? [{ icon: MapPin, label: "Lieu", value: offer.location }] : []),
     ];
 
     return (
@@ -171,21 +170,6 @@ export default function MasterclassRegistration() {
                                     </div>
                                 </div>
                             ))}
-                            {offer.capacity !== null && (
-                                <div className="flex items-start gap-4 py-5">
-                                    <Users className="w-4 h-4 text-[#2563EB] shrink-0 mt-1" />
-                                    <div>
-                                        <dt className="text-[9px] font-bold uppercase tracking-[0.25em] text-gray-400 mb-1">
-                                            Places
-                                        </dt>
-                                        <dd className="text-sm font-medium">
-                                            {offer.full
-                                                ? "Complet"
-                                                : `${offer.seatsLeft} restante${(offer.seatsLeft ?? 0) > 1 ? "s" : ""} sur ${offer.capacity}`}
-                                        </dd>
-                                    </div>
-                                </div>
-                            )}
                         </dl>
                     </div>
 
@@ -218,7 +202,7 @@ export default function MasterclassRegistration() {
                                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-3">
                                     Séance complète
                                 </p>
-                                <p className="text-2xl font-bold tracking-tight mb-4">Toutes les places sont prises</p>
+                                <p className="text-2xl font-bold tracking-tight mb-4">Les inscriptions sont closes</p>
                                 <p className="text-sm text-gray-400 font-light">
                                     Une nouvelle Masterclass est programmée le mois prochain. Écrivez-nous pour être
                                     prévenu de son ouverture.

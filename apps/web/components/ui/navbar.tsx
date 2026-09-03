@@ -16,6 +16,16 @@ import {
     Sparkles,
 } from "lucide-react";
 
+/**
+ * Le rôle est stocké en anglais côté base (enum Prisma) : on ne l'affiche jamais
+ * brut dans la barre de navigation, qui est entièrement francophone.
+ */
+const ROLE_LABELS: Record<string, string> = {
+    ADMIN: "Administrateur",
+    INSTRUCTOR: "Formateur",
+    STUDENT: "Étudiant",
+};
+
 export const Navbar = () => {
     const { data: session } = useSession();
     const { cart } = useCart();
@@ -113,7 +123,7 @@ export const Navbar = () => {
                             <Link href="/profile" className="flex items-center gap-4 group">
                                 <div className="text-right">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-[#050505]">{user.name}</p>
-                                    <p className="text-[8px] font-bold text-[#2563EB] uppercase tracking-widest">{user.role}</p>
+                                    <p className="text-[8px] font-bold text-[#2563EB] uppercase tracking-widest">{ROLE_LABELS[user.role] ?? user.role}</p>
                                 </div>
                                 <div className="w-10 h-10 bg-[#F9FAFB] border border-gray-100 flex items-center justify-center group-hover:border-[#001F3F] transition-colors">
                                     <User className="w-4 h-4 text-[#001F3F]" />
@@ -132,13 +142,13 @@ export const Navbar = () => {
                                 onClick={() => openAuth('login')}
                                 className="text-[10px] font-bold uppercase tracking-widest text-[#050505] hover:opacity-70"
                             >
-                                Login
+                                Connexion
                             </button>
                             <button
                                 onClick={() => openAuth('signup')}
                                 className="bg-[#001F3F] text-white text-[10px] font-bold uppercase tracking-[0.2em] px-6 py-3 hover:bg-[#2563EB] transition-all flex items-center gap-3"
                             >
-                                Join Now <ArrowRight className="w-3 h-3" />
+                                Rejoindre <ArrowRight className="w-3 h-3" />
                             </button>
                         </div>
                     )}
@@ -188,7 +198,7 @@ export const Navbar = () => {
                                 onClick={() => { setIsMenuOpen(false); openAuth('signup'); }}
                                 className="text-[#2563EB] text-xl font-bold uppercase tracking-widest text-left"
                             >
-                                Create Account →
+                                Créer un compte →
                             </button>
                         )}
                     </div>
