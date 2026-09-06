@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, X, ExternalLink, ShieldCheck, AlertCircle, CheckCircle2 } from "lucide-react";
 import { HOME_CURRENCY, formatAmount, type Currency } from "@/lib/pricing";
 
@@ -66,6 +67,29 @@ export default function PaymentDialog({
     const [popupBlocked, setPopupBlocked] = useState(false);
     const settledRef = useRef(false);
     const popupRef = useRef<Window | null>(null);
+
+    // `document` n'existe pas côté serveur : le portail ne se crée qu'une fois monté.
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Le dialogue est ouvert depuis des endroits très divers (barre latérale de
+    // cours, bannière Premium, fiche Masterclass...), certains en `position: sticky`.
+    // Or `sticky` — comme `fixed` — crée toujours un contexte d'empilement, même
+    // sans z-index explicite : un `fixed z-[100]` imbriqué dedans reste prisonnier
+    // de ce contexte local et peut se retrouver sous des éléments de page situés
+    // ailleurs dans le DOM, malgré son z-index élevé. Le rendre directement dans
+    // `document.body` via un portail contourne le problème une fois pour toutes,
+    // quel que soit l'appelant.
+    useEffect(() => {
+        if (!mounted) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [mounted]);
 
     const poll = useCallback(async (): Promise<boolean> => {
         if (settledRef.current) return true;
@@ -135,7 +159,9 @@ export default function PaymentDialog({
         return () => clearInterval(timer);
     }, [poll]);
 
-    return (
+    if (!mounted) return null;
+
+    return createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
             <div className="w-full max-w-lg bg-white border border-gray-100 shadow-2xl flex flex-col max-h-[92vh]">
                 <div className="flex items-start justify-between gap-4 p-6 border-b border-gray-100">
@@ -237,6 +263,7 @@ export default function PaymentDialog({
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

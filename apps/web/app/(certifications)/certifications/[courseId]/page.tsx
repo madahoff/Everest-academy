@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import { ScrollHint } from "@/components/ui/scroll-hint";
 import {
     Award,
     Download,
@@ -181,6 +182,9 @@ export default function Certification() {
             <footer className="py-12 text-center text-[9px] font-bold uppercase tracking-[0.5em] text-gray-300 border-t border-gray-100">
                 Everest Certification Authority • Non-Transferable Document
             </footer>
+
+            {/* Cette page vit hors du layout (main) : l'indicateur y est monté à la main. */}
+            <ScrollHint />
         </div>
     );
 }

@@ -1,6 +1,7 @@
 "use client";
 import { Navbar } from "@/components/ui/navbar";
 import { Footer } from "@/components/ui/footer";
+import { ScrollHint } from "@/components/ui/scroll-hint";
 
 export default function MainLayout({
     children,
@@ -14,6 +15,8 @@ export default function MainLayout({
                 {children}
             </main>
             <Footer />
+            {/* Monté ici plutôt que page par page : une seule instance, un seul comportement. */}
+            <ScrollHint />
         </div>
     );
 }
