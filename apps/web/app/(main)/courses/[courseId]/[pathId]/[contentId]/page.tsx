@@ -66,14 +66,14 @@ export default function Content() {
     const [newComment, setNewComment] = useState("");
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white">
+        <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white pt-20">
 
             {/* Header Navigation : Barre de progression ultra-fine */}
-            <div className="fixed top-0 left-0 w-full h-1 bg-gray-100 z-[60]">
+            <div className="fixed top-20 left-0 w-full h-1 bg-gray-100 z-[85]">
                 <div className="h-full bg-[#2563EB] w-1/2 transition-all duration-1000"></div>
             </div>
 
-            <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center sticky top-1 z-50">
+            <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center sticky top-[84px] z-40">
                 <button
                     onClick={() => router.push(`/courses/${courseId}/${pathId}`)}
                     className="group flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-[#001F3F] transition-colors"

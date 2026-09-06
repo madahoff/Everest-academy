@@ -58,10 +58,10 @@ export default async function SectionPage({ params }: { params: Promise<{ course
     const nextSection = section.course.sections[currentIndex + 1];
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white">
+        <div className="min-h-screen bg-[#F9FAFB] text-[#050505] font-sans selection:bg-[#001F3F] selection:text-white pt-20">
 
             {/* Header Minimalist */}
-            <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center sticky top-20 z-50 transition-all duration-300 shadow-sm">
+            <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center sticky top-20 z-40 transition-all duration-300 shadow-sm">
                 <Link
                     href={`/courses/${courseId}`}
                     className="group flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-[#001F3F] transition-colors"

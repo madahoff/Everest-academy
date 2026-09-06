@@ -211,7 +211,9 @@ function CoursesListContent({ initialCourses, isPremium, premiumOffer }: Courses
             />
 
             {/* --- TOOLBAR: STICKY FILTERS --- */}
-            <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 py-4 shadow-sm">
+            {/* top-20 = hauteur de la navbar fixe une fois défilée : sans cet offset la
+                barre de filtres se collait sous elle et les deux textes se superposaient. */}
+            <div className="sticky top-20 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 py-4 shadow-sm">
                 <div className="max-w-[1600px] mx-auto px-6 lg:px-12 flex flex-col lg:flex-row justify-between items-center gap-4">
 
                     {/* Left: Search & Type */}
