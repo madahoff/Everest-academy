@@ -14,6 +14,7 @@ import {
     X,
     ArrowRight,
     Sparkles,
+    LogOut,
 } from "lucide-react";
 
 /**
@@ -260,13 +261,48 @@ export const Navbar = () => {
                                 S'inscrire à la prochaine Masterclass <ArrowRight className="w-3.5 h-3.5 shrink-0" />
                             </Link>
 
-                            {!user && (
-                                <button
-                                    onClick={() => { setIsMenuOpen(false); openAuth('signup'); }}
-                                    className="text-[#2563EB] text-lg sm:text-xl font-bold uppercase tracking-widest text-left"
-                                >
-                                    Créer un compte →
-                                </button>
+                            {/*
+                             * La version bureau (masquée en dessous de `lg`) réservait déjà
+                             * connexion/déconnexion au menu horizontal : sous cette largeur,
+                             * ni l'une ni l'autre n'étaient jamais accessibles.
+                             */}
+                            {user ? (
+                                <div className="flex flex-col gap-5">
+                                    <Link
+                                        href="/profile"
+                                        onClick={() => setIsMenuOpen(false)}
+                                        className="flex items-center gap-4 group"
+                                    >
+                                        <div className="w-12 h-12 shrink-0 bg-white/5 border border-gray-800 flex items-center justify-center group-hover:border-[#2563EB] transition-colors">
+                                            <User className="w-5 h-5 text-[#2563EB]" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-black uppercase tracking-widest text-white">{user.name}</p>
+                                            <p className="text-[10px] font-bold text-[#2563EB] uppercase tracking-widest">{ROLE_LABELS[user.role] ?? user.role}</p>
+                                        </div>
+                                    </Link>
+                                    <button
+                                        onClick={() => { setIsMenuOpen(false); signOut(); }}
+                                        className="flex items-center justify-center gap-2 border border-gray-800 text-gray-400 text-xs font-bold uppercase tracking-widest px-6 py-4 hover:border-red-500 hover:text-red-500 transition-colors"
+                                    >
+                                        <LogOut className="w-4 h-4" /> Déconnexion
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-4">
+                                    <button
+                                        onClick={() => { setIsMenuOpen(false); openAuth('login'); }}
+                                        className="flex items-center justify-center gap-2 border border-gray-700 text-white text-xs font-bold uppercase tracking-widest px-6 py-5 hover:border-white transition-colors"
+                                    >
+                                        Connexion
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMenuOpen(false); openAuth('signup'); }}
+                                        className="text-[#2563EB] text-lg sm:text-xl font-bold uppercase tracking-widest text-left"
+                                    >
+                                        Créer un compte →
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
