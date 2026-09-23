@@ -137,20 +137,97 @@ export function parseMasterclassInput(body: unknown): { value: MasterclassInput 
     }
 }
 
+// ─── Pack Premium et Masterclass ──────────────────────────────────────────────
+//
+// Le Pack Premium ouvre TOUTES les Masterclass. La promesse ne tient que si elle est
+// posée des DEUX côtés, car les deux événements arrivent dans n'importe quel ordre :
+//
+//  - une séance est publiée APRÈS l'octroi du pack → `enrollPremiumMembers`, appelée
+//    à chaque enregistrement d'une séance ;
+//  - le pack est accordé APRÈS la publication d'une séance → `enrollPremiumInUpcoming`,
+//    appelée par tous les chemins qui font passer un compte en PREMIUM : l'achat sur
+//    la vitrine, le basculement d'une ligne de l'annuaire, l'action groupée, la
+//    création d'un compte déjà Premium.
+//
+// `enrollAllPremiumMembers` est le RATTRAPAGE : il repasse sur toute la population et
+// n'a rien à voir avec un cas particulier — il répare les comptes passés en Premium
+// avant que ces automatismes n'existent, et sert de filet si l'un d'eux a échoué.
+//
+// Les trois sont idempotents : la contrainte d'unicité (séance, membre) et
+// `skipDuplicates` font que les rejouer ne crée aucun doublon.
+
+/**
+ * Devise d'une inscription offerte. Aucun montant n'est facturé : elle ne sert qu'à ce
+ * que la colonne ne reste pas vide — l'ariary est la devise de référence.
+ */
+const FREE_REGISTRATION_CURRENCY = "MGA"
+
+/** Au-delà, l'insertion est découpée : un `createMany` de 50 000 lignes n'a pas de sens. */
+const INSERT_CHUNK = 1_000
+
+/** Identifiants des séances PUBLIÉES à venir — celles que le pack ouvre. */
+async function upcomingPublishedIds(now: Date): Promise<string[]> {
+    const sessions = await prisma.masterclass.findMany({
+        where: { status: "PUBLISHED", scheduledAt: { gte: now } },
+        select: { id: true },
+    })
+    return sessions.map((session) => session.id)
+}
+
+/**
+ * Pose les inscriptions qui manquent dans le produit (séances x membres), et elles
+ * seules : une inscription existante n'est JAMAIS réécrite. Une place annulée par le
+ * membre, ou marquée absente après la séance, reste donc telle quelle.
+ */
+async function createMissingRegistrations(
+    masterclassIds: string[],
+    userIds: string[],
+    now: Date,
+): Promise<number> {
+    if (masterclassIds.length === 0 || userIds.length === 0) return 0
+
+    const existing = await prisma.masterclassRegistration.findMany({
+        where: { masterclassId: { in: masterclassIds }, userId: { in: userIds } },
+        select: { masterclassId: true, userId: true },
+    })
+    const known = new Set(existing.map((row) => `${row.masterclassId}:${row.userId}`))
+
+    const rows = []
+    for (const masterclassId of masterclassIds) {
+        for (const userId of userIds) {
+            if (known.has(`${masterclassId}:${userId}`)) continue
+            rows.push({
+                masterclassId,
+                userId,
+                amount: 0,
+                currency: FREE_REGISTRATION_CURRENCY,
+                status: "CONFIRMED" as const,
+                confirmedAt: now,
+            })
+        }
+    }
+    if (rows.length === 0) return 0
+
+    let created = 0
+    for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+        const result = await prisma.masterclassRegistration.createMany({
+            data: rows.slice(i, i + INSERT_CHUNK),
+            skipDuplicates: true,
+        })
+        created += result.count
+    }
+    return created
+}
+
 /**
  * Inscrit d'office tous les membres du Pack Premium à une séance PUBLIÉE.
  *
- * Le pack ouvre toutes les Masterclass : à l'achat, la vitrine inscrit son acheteur
- * aux séances déjà programmées ; ici, on couvre le sens inverse — une séance publiée
- * APRÈS l'achat. Les deux ensemble tiennent la promesse quel que soit l'ordre des
- * événements.
+ * Sans effet sur une séance en brouillon, archivée ou déjà tenue. La jauge n'est pas
+ * opposée : la place d'un membre Premium lui a été vendue avec le pack — le nombre de
+ * places annoncé doit donc être dimensionné en conséquence.
  *
- * Idempotent (`skipDuplicates` s'appuie sur la contrainte d'unicité), et sans effet
- * sur une séance en brouillon ou archivée. La jauge n'est pas opposée : la place d'un
- * membre Premium lui a été vendue avec le pack.
- *
- * AUCUN E-MAIL n'est envoyé : une publication déclencherait sinon un envoi en masse
- * au milieu d'une requête HTTP. La console permet de le faire ligne par ligne.
+ * AUCUN E-MAIL n'est envoyé : une publication déclencherait sinon un envoi en masse au
+ * milieu d'une requête HTTP. La console permet de le faire ligne par ligne.
  */
 export async function enrollPremiumMembers(masterclassId: string): Promise<number> {
     const masterclass = await prisma.masterclass.findUnique({
@@ -162,29 +239,71 @@ export async function enrollPremiumMembers(masterclassId: string): Promise<numbe
     // Une séance déjà tenue n'inscrit plus personne, fût-il Premium.
     if (masterclass.scheduledAt.getTime() < Date.now()) return 0
 
-    const [members, existing] = await Promise.all([
-        prisma.user.findMany({ where: { plan: "PREMIUM" }, select: { id: true } }),
-        prisma.masterclassRegistration.findMany({ where: { masterclassId }, select: { userId: true } }),
+    const members = await prisma.user.findMany({ where: { plan: "PREMIUM" }, select: { id: true } })
+    return createMissingRegistrations([masterclassId], members.map((member) => member.id), new Date())
+}
+
+/**
+ * Inscrit des membres à TOUTES les séances publiées à venir — le sens inverse du
+ * précédent : le pack vient de leur être accordé, les séances existaient déjà.
+ *
+ * La liste reçue est RELUE en base et réduite aux comptes réellement PREMIUM : les
+ * appelants travaillent sur une sélection de l'annuaire, qui mélange les deux plans.
+ * Un compte repassé en FREE entre-temps n'est donc pas inscrit.
+ */
+export async function enrollPremiumInUpcoming(userIds: string[], now: Date = new Date()): Promise<number> {
+    if (userIds.length === 0) return 0
+
+    const [sessions, members] = await Promise.all([
+        upcomingPublishedIds(now),
+        prisma.user.findMany({ where: { id: { in: userIds }, plan: "PREMIUM" }, select: { id: true } }),
     ])
 
-    const known = new Set(existing.map((r) => r.userId))
-    const missing = members.filter((member) => !known.has(member.id))
-    if (missing.length === 0) return 0
+    return createMissingRegistrations(sessions, members.map((member) => member.id), now)
+}
 
-    const now = new Date()
-    const created = await prisma.masterclassRegistration.createMany({
-        data: missing.map((member) => ({
-            masterclassId,
-            userId: member.id,
-            amount: 0,
-            currency: "MGA",
-            status: "CONFIRMED" as const,
-            confirmedAt: now,
-        })),
-        skipDuplicates: true,
-    })
+/**
+ * Même chose, mais qui ne remonte JAMAIS d'erreur.
+ *
+ * Pour les chemins dont l'objet premier est d'accorder le pack : le plan est déjà
+ * écrit quand on arrive ici, et échouer donnerait à l'administrateur un message
+ * d'erreur sur une opération qui a bien eu lieu. L'inscription manquée se rattrape
+ * — c'est exactement ce à quoi sert `enrollAllPremiumMembers`.
+ */
+export async function enrollPremiumInUpcomingSafely(userIds: string[]): Promise<number> {
+    try {
+        return await enrollPremiumInUpcoming(userIds)
+    } catch (error) {
+        console.error("Inscription Masterclass des membres Premium échouée", error)
+        return 0
+    }
+}
 
-    return created.count
+export interface PremiumEnrollmentReport {
+    /** Membres du Pack Premium au moment du passage. */
+    members: number
+    /** Séances publiées à venir considérées. */
+    sessions: number
+    /** Inscriptions réellement créées — 0 si tout le monde était déjà inscrit. */
+    created: number
+}
+
+/**
+ * RATTRAPAGE GLOBAL : inscrit tous les membres du Pack Premium à toutes les séances
+ * publiées à venir.
+ *
+ * Utile une fois, pour les comptes passés en Premium avant que l'inscription d'office
+ * n'existe. Le rejouer ensuite ne crée rien : c'est une quittance, pas une opération
+ * dangereuse. Aucun e-mail n'est envoyé, et aucune inscription existante n'est touchée.
+ */
+export async function enrollAllPremiumMembers(now: Date = new Date()): Promise<PremiumEnrollmentReport> {
+    const [sessions, members] = await Promise.all([
+        upcomingPublishedIds(now),
+        prisma.user.findMany({ where: { plan: "PREMIUM" }, select: { id: true } }),
+    ])
+
+    const created = await createMissingRegistrations(sessions, members.map((member) => member.id), now)
+    return { members: members.length, sessions: sessions.length, created }
 }
 
 /** Traduit une collision de clé unique Prisma en message lisible. */

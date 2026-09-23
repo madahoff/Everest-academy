@@ -8,6 +8,11 @@
  *  - `users.plan = PREMIUM` — le Pack Premium, qui ouvre tout le catalogue, y compris
  *    les cours publiés APRÈS l'octroi.
  *
+ * Le pack ouvre AUSSI toutes les Masterclass : l'accorder ici inscrit donc d'office ses
+ * bénéficiaires aux séances publiées à venir (voir `lib/masterclass.ts`). Sans cela, un
+ * membre passé en Premium depuis la console resterait absent de la liste des inscrits
+ * de séances déjà programmées, alors que sa place lui est due.
+ *
  * Ce module écrit les deux, et rien d'autre : c'est le seul endroit de la console qui
  * crée ou supprime des `Purchase`, pour que la règle « un accès offert vaut une ligne
  * à 0 » reste vraie partout — l'audience d'un cours se compte sur `Purchase`.
@@ -19,6 +24,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { enrollPremiumInUpcomingSafely } from "@/lib/masterclass"
 
 /** Garde-fous : au-delà, c'est une erreur d'appel, pas une opération d'administration. */
 const MAX_USERS = 1000
@@ -45,6 +51,8 @@ export interface AccessResult {
     /** Accès retirés qui avaient été PAYÉS : autant de recette effacée des statistiques. */
     paidRevoked: number
     planChanged: number
+    /** Inscriptions Masterclass créées par l'octroi du Pack Premium. */
+    masterclassEnrolled: number
 }
 
 const MODES: AccessMode[] = ["set", "grant", "revoke"]
@@ -193,5 +201,10 @@ export async function applyCourseAccess(request: AccessRequest): Promise<AccessR
         }
     })
 
-    return { granted: toCreate.length, revoked: toRevoke.length, paidRevoked, planChanged }
+    // HORS transaction, et après elle : la sélection est relue et réduite aux comptes
+    // réellement PREMIUM, ce qui exige que le passage de plan soit committé. Une
+    // inscription manquée ne fait pas échouer l'octroi — elle se rattrape.
+    const masterclassEnrolled = plan === "PREMIUM" ? await enrollPremiumInUpcomingSafely(userIds) : 0
+
+    return { granted: toCreate.length, revoked: toRevoke.length, paidRevoked, planChanged, masterclassEnrolled }
 }

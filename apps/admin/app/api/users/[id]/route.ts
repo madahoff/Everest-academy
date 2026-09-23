@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from "@/lib/require-admin"
 import { USER_SELECT, pickUserUpdate } from "@/lib/user-fields"
+import { enrollPremiumInUpcomingSafely } from "@/lib/masterclass"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const denied = await requireAdmin()
@@ -43,7 +44,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
 
         const user = await prisma.user.update({ where: { id }, data, select: USER_SELECT })
-        return NextResponse.json(user)
+
+        // Le Pack Premium ouvre toutes les Masterclass : le compte est inscrit d'office
+        // aux séances publiées à venir. Idempotent, et sans effet si le plan n'a pas
+        // bougé — c'est justement ce qui permet de l'appeler sans comparer l'avant.
+        const masterclassEnrolled =
+            user.plan === "PREMIUM" ? await enrollPremiumInUpcomingSafely([user.id]) : 0
+
+        return NextResponse.json({ ...user, masterclassEnrolled })
     } catch (error: any) {
         if (error.code === 'P2025') return NextResponse.json({ error: 'User not found' }, { status: 404 })
         return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })

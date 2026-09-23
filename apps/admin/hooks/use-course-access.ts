@@ -20,6 +20,8 @@ export interface AccessMutationResult {
     revoked: number
     paidRevoked: number
     planChanged: number
+    /** Inscriptions Masterclass créées par l'octroi du Pack Premium. */
+    masterclassEnrolled: number
 }
 
 /**
@@ -57,6 +59,14 @@ export function useCourseAccessMutation() {
 
             toast.success(variables.successMessage || (parts.length > 0 ? parts.join(" · ") : "Aucun changement"))
 
+            // Le pack ouvre aussi les Masterclass : on le dit, sinon l'administrateur
+            // découvrirait des inscrits qu'il n'a pas saisis.
+            if (result.masterclassEnrolled > 0) {
+                toast.info(
+                    `${result.masterclassEnrolled} inscription(s) Masterclass ajoutée(s) : le Pack Premium ouvre toutes les séances à venir.`,
+                )
+            }
+
             if (result.paidRevoked > 0) {
                 toast.warning(
                     `${result.paidRevoked} accès payé${result.paidRevoked > 1 ? "s ont" : " a"} été retiré${result.paidRevoked > 1 ? "s" : ""} : la recette correspondante disparaît des statistiques.`,
@@ -68,6 +78,9 @@ export function useCourseAccessMutation() {
             queryClient.invalidateQueries({ queryKey: ["users"] })
             queryClient.invalidateQueries({ queryKey: ["courses"] })
             queryClient.invalidateQueries({ queryKey: ["stats"] })
+            // Le Pack Premium inscrit aux Masterclass : leurs compteurs d'inscrits aussi.
+            queryClient.invalidateQueries({ queryKey: ["masterclasses"] })
+            queryClient.invalidateQueries({ queryKey: ["masterclass-registrations"] })
         },
         onError: (error) => {
             toast.error(error.message)

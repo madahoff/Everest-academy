@@ -12,6 +12,7 @@ import {
     Search,
     Sparkles,
     Trash2,
+    UserPlus,
     Users,
     X,
 } from "lucide-react"
@@ -176,6 +177,39 @@ export default function MasterclassPage() {
         onError: (err: Error) => toast.error(err.message),
     })
 
+    /**
+     * Rattrapage des membres du Pack Premium.
+     *
+     * Le pack ouvre toutes les Masterclass, et l'inscription d'office est désormais
+     * automatique des deux côtés — à la publication d'une séance comme à l'octroi du
+     * pack. Ce bouton ne sert donc qu'aux comptes passés en Premium AVANT que cet
+     * automatisme n'existe, et de filet si l'un des deux a échoué. Il est sans danger :
+     * aucune inscription existante n'est touchée, aucun e-mail n'est envoyé.
+     */
+    const enrollPremiumMutation = useMutation({
+        mutationFn: async () => {
+            const res = await fetch("/api/masterclass/enroll-premium", { method: "POST" })
+            const body = await res.json()
+            if (!res.ok) throw new Error(body.error || "Échec de l'inscription des membres Premium")
+            return body as { members: number; sessions: number; created: number }
+        },
+        onSuccess: (report) => {
+            if (report.sessions === 0) {
+                toast.info("Aucune séance à venir : il n'y a rien à ouvrir aux membres Premium")
+            } else if (report.created === 0) {
+                toast.success(
+                    `Rien à faire : les ${report.members} membre(s) Premium sont déjà inscrits aux ${report.sessions} séance(s) à venir`,
+                )
+            } else {
+                toast.success(
+                    `${report.created} inscription(s) créée(s) — ${report.members} membre(s) Premium sur ${report.sessions} séance(s) à venir`,
+                )
+            }
+            refreshAll()
+        },
+        onError: (err: Error) => toast.error(err.message),
+    })
+
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
             const res = await fetch(`/api/masterclass/${id}`, { method: "DELETE" })
@@ -241,7 +275,24 @@ export default function MasterclassPage() {
                         Master<span className="text-gray-300">class</span>
                     </h2>
                 </div>
-                <MasterclassFormDialog onSuccess={refreshAll} />
+                <div className="flex items-center gap-3">
+                    {/* Rattrapage : les membres du Pack Premium ont droit à toutes les séances. */}
+                    <button
+                        type="button"
+                        onClick={() => enrollPremiumMutation.mutate()}
+                        disabled={enrollPremiumMutation.isPending}
+                        title="Inscrit tous les membres du Pack Premium aux séances à venir. Sans effet sur les inscriptions existantes, et sans e-mail."
+                        className="flex items-center gap-2 border border-gray-200 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-[#2563EB] hover:text-[#2563EB] disabled:opacity-50"
+                    >
+                        {enrollPremiumMutation.isPending ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <UserPlus className="w-3.5 h-3.5" />
+                        )}
+                        Inscrire les membres Premium
+                    </button>
+                    <MasterclassFormDialog onSuccess={refreshAll} />
+                </div>
             </div>
 
             {/* La séance à venir, mise en avant : c'est celle que la vitrine annonce. */}

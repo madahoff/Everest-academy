@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from "@/lib/require-admin"
 import { USER_SELECT } from "@/lib/user-fields"
+import { enrollPremiumInUpcomingSafely } from "@/lib/masterclass"
 
 // GET /api/users - List all users
 export async function GET() {
@@ -59,6 +60,11 @@ export async function POST(request: Request) {
             data: { name, email, role: role || 'STUDENT', plan: plan || 'FREE' },
             select: USER_SELECT,
         })
+
+        // Compte créé d'emblée en Premium : le pack ouvre toutes les Masterclass, il est
+        // donc inscrit aux séances publiées à venir comme n'importe quel membre du pack.
+        if (user.plan === 'PREMIUM') await enrollPremiumInUpcomingSafely([user.id])
+
         return NextResponse.json(user, { status: 201 })
     } catch (error: any) {
         if (error.code === 'P2002') {
