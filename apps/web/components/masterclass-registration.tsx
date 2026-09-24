@@ -134,7 +134,9 @@ export default function MasterclassRegistration({ masterclassId }: { masterclass
 
     const registration = state?.registration ?? null;
     const registered = registration !== null && CONFIRMED_STATUSES.includes(registration.status);
-    const pending = registration?.status === "PENDING" && registration.orderStatus === "PENDING";
+    // Un paiement ouvert ne crée plus d'inscription : il se lit sur la commande.
+    const pendingPayment = state?.pendingPayment ?? null;
+    const pending = pendingPayment !== null;
     const failed = registration?.status === "PENDING" && registration.orderStatus === "FAILED";
     const unavailable = !offer.free && offer.price === null;
 
@@ -307,11 +309,12 @@ export default function MasterclassRegistration({ masterclassId }: { masterclass
                                     </div>
                                 )}
 
-                                {pending && registration?.paymentUrl && (
+                                {pending && pendingPayment?.paymentUrl && (
                                     <div className="p-4 mb-6 border border-[#2563EB]/40 bg-[#2563EB]/10 text-[11px] text-gray-300">
-                                        Un paiement est déjà ouvert pour cette séance.{" "}
+                                        Un paiement est déjà ouvert pour cette séance. Votre place ne sera retenue
+                                        qu'une fois le règlement abouti.{" "}
                                         <a
-                                            href={registration.paymentUrl}
+                                            href={pendingPayment.paymentUrl}
                                             target="_blank"
                                             rel="noreferrer"
                                             className="font-bold text-white underline"

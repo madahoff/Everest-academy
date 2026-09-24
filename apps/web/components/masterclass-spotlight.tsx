@@ -41,11 +41,24 @@ export interface MasterclassRegistrationView {
     paymentUrl: string | null;
 }
 
+/**
+ * Règlement ouvert mais pas encore abouti. Porté par la COMMANDE, pas par une
+ * inscription : tant que rien n'est encaissé, le visiteur n'est pas inscrit — il a
+ * seulement un paiement à terminer.
+ */
+export interface PendingPaymentView {
+    orderId: string;
+    paymentUrl: string | null;
+    pollUrl: string;
+}
+
 export interface MasterclassState {
     masterclass: MasterclassOfferView | null;
     registration: MasterclassRegistrationView | null;
     /** Le visiteur détient le Pack Premium : sa place est comprise dans son pack. */
     isPremium: boolean;
+    /** Paiement ouvert à reprendre. `null` : aucun règlement en cours. */
+    pendingPayment?: PendingPaymentView | null;
 }
 
 /**
@@ -117,7 +130,9 @@ export default function MasterclassSpotlight({ variant = "light" }: { variant?: 
 
     const registration = state?.registration ?? null;
     const registered = registration !== null && CONFIRMED_STATUSES.includes(registration.status);
-    const pending = registration?.status === "PENDING" && registration.orderStatus === "PENDING";
+    // Un paiement ouvert n'inscrit plus : il se lit sur la commande, pas sur une ligne
+    // d'inscription qui n'existe qu'une fois la place encaissée.
+    const pending = (state?.pendingPayment ?? null) !== null;
 
     const dark = variant === "dark";
     const shell = dark ? "bg-[#050505] text-white" : "bg-white text-[#050505] border-y border-gray-200";

@@ -8,14 +8,14 @@ import {
     assertRegistrable,
     buildMasterclassItem,
     enrollPremiumMember,
+    findPendingMasterclassOrder,
     getNextMasterclass,
     getRegistrationView,
-    openRegistration,
     registrationLabel,
 } from "@/lib/masterclass";
 import { sendMasterclassConfirmation } from "@/lib/masterclass-email";
 import { isPremiumMember } from "@/lib/premium";
-import { createAndPayOrder, orderPayload } from "@/lib/wallet";
+import { createAndPayOrder, orderPayload, syncOrder } from "@/lib/wallet";
 import { defaultMethodFor, resolvePrice } from "@/lib/pricing";
 import { getRequestCurrency } from "@/lib/request-currency";
 import { walletApiOrigin } from "@/lib/wallet-api";
@@ -34,8 +34,10 @@ const METHODS: PaymentMethod[] = ["WALLET", "MOBILE_MONEY", "CARD"];
  * dont l'issue est sondée sur `/api/orders/:id` — c'est ce sondage qui confirme
  * l'inscription et déclenche l'e-mail.
  *
- * L'inscription en attente est posée AVANT le paiement : la console voit ainsi les
- * inscriptions en cours de règlement, et pas seulement celles qui ont abouti.
+ * AUCUNE INSCRIPTION N'EST POSÉE AVANT L'ENCAISSEMENT : une ligne d'inscription vaut
+ * autorisation — elle compte dans les inscrits de la console et déclenche l'e-mail de
+ * confirmation. Un paiement ouvert ne laisse donc de trace que sur la COMMANDE, et
+ * c'est elle qu'on reprend si le payeur revient sans avoir réglé.
  */
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -69,11 +71,43 @@ export async function POST(request: Request) {
 
         const existing = await prisma.masterclassRegistration.findUnique({
             where: { masterclassId_userId: { masterclassId: masterclass.id, userId } },
-            include: { order: { select: { status: true } } },
         });
 
         // Résolu avant les gardes : le pack lève la jauge, et dispense du paiement.
         const premium = await isPremiumMember(userId);
+
+        // Règlement déjà ouvert : on le REPREND au lieu d'en ouvrir un second, et on
+        // le resonde au passage — le payeur a pu régler sans que l'issue soit revenue
+        // jusqu'ici. Un membre Premium n'est pas concerné : il ne paie pas sa place.
+        if (!premium) {
+            const opened = await findPendingMasterclassOrder(userId, masterclass.id);
+            if (opened) {
+                const synced = await syncOrder(opened);
+
+                // Encaissé entre-temps : l'octroi vient d'avoir lieu, l'inscription existe.
+                if (synced.status === "PAID") {
+                    return NextResponse.json({
+                        order: await orderPayload(synced),
+                        paymentUrl: null,
+                        mode: null,
+                        registration: await getRegistrationView(masterclass.id, userId),
+                    });
+                }
+
+                // Toujours en attente : on rend le lien de paiement d'origine.
+                if (synced.status === "PENDING") {
+                    return NextResponse.json({
+                        order: await orderPayload(synced),
+                        paymentUrl: synced.paymentUrl,
+                        mode: null,
+                        paymentOrigin: walletApiOrigin(),
+                        registration: null,
+                        resumed: true,
+                    });
+                }
+                // ÉCHOUÉE ou ANNULÉE : on laisse repartir sur une nouvelle tentative.
+            }
+        }
 
         await assertRegistrable(masterclass, existing, { premium });
 
@@ -122,16 +156,8 @@ export async function POST(request: Request) {
 
         const item = buildMasterclassItem(masterclass, currency);
 
-        // Posée avant le paiement : une tentative abandonnée reste visible en console,
-        // et la contrainte d'unicité (masterclass, utilisateur) interdit le doublon même
-        // en cas de double clic.
-        await openRegistration({
-            userId,
-            masterclassId: masterclass.id,
-            amount: item.amount,
-            currency,
-        });
-
+        // Rien n'est écrit dans les inscriptions ici : seule la COMMANDE est ouverte.
+        // L'inscription naîtra de l'encaissement, dans `grantOrderAccess`.
         const result = await createAndPayOrder({
             userId,
             items: [item],
@@ -139,14 +165,6 @@ export async function POST(request: Request) {
             currency,
             returnPath,
             label: registrationLabel(masterclass),
-        });
-
-        // Rattachement de la commande à l'inscription. `updateMany` filtré sur la
-        // paire : le règlement au solde a pu, entre-temps, faire passer la ligne à
-        // CONFIRMED — on ne touche donc qu'au lien, jamais au statut.
-        await prisma.masterclassRegistration.updateMany({
-            where: { masterclassId: masterclass.id, userId },
-            data: { orderId: result.order.id },
         });
 
         return NextResponse.json({

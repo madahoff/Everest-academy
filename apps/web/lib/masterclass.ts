@@ -11,14 +11,32 @@
  *
  *  2. L'inscription n'est PAS un second circuit de paiement. Elle passe par la même
  *     `Order` que les cours, avec un `OrderItem.masterclassId`, et c'est
- *     `grantOrderAccess` (lib/wallet.ts) qui la confirme quand l'argent est encaissé.
+ *     `grantOrderAccess` (lib/wallet.ts) qui la CRÉE quand l'argent est encaissé.
  *     Cette table ne tient que ce que la commande ignore : la place et la présence.
+ *
+ *  3. RIEN N'EST ÉCRIT AVANT L'ENCAISSEMENT. Une ligne d'inscription vaut autorisation :
+ *     elle ouvre la séance, elle compte dans les inscrits de la console, elle part en
+ *     e-mail de confirmation. Ouvrir un paiement n'en crée donc aucune — sans quoi un
+ *     simple clic sur « s'inscrire » ferait entrer dans la liste quelqu'un qui n'a
+ *     jamais payé. Les seules inscriptions sans paiement sont celles qui n'en
+ *     attendent aucun : séance offerte et membres du Pack Premium.
+ *
+ *     Une tentative de règlement en cours se lit sur la COMMANDE (`findPendingMasterclassOrder`),
+ *     qui est justement l'écriture d'un paiement — c'est elle qui permet de reprendre
+ *     un règlement abandonné sans ouvrir un second paiement.
  */
 
 import { prisma } from "@/lib/prisma";
 import { currentMonthKey, monthKeyOf } from "@/lib/masterclass-month";
 import { resolvePrice, type Currency } from "@/lib/pricing";
-import type { Masterclass, MasterclassRegistration, Prisma, RegistrationStatus } from "@prisma/client";
+import type {
+    Masterclass,
+    MasterclassRegistration,
+    Order,
+    OrderItem,
+    Prisma,
+    RegistrationStatus,
+} from "@prisma/client";
 
 /** Erreur métier de l'inscription, traduite en réponse HTTP par le point d'appel. */
 export class MasterclassError extends Error {
@@ -272,15 +290,21 @@ export function registrationLabel(masterclass: Masterclass): string {
 /**
  * Refuse une inscription impossible. Appelée avant toute ouverture de paiement.
  *
- * `existing` est l'inscription éventuelle du visiteur : une inscription ANNULÉE, ou
- * restée en attente sur un paiement échoué, ne bloque pas une nouvelle tentative —
- * c'est le cas normal de quelqu'un qui a abandonné puis revient.
+ * `existing` est l'inscription éventuelle du visiteur. Depuis qu'aucune ligne n'est
+ * posée avant l'encaissement, elle n'existe que si la place est ACQUISE — payée,
+ * offerte ou ouverte par le Pack Premium — ou si elle a été annulée. Une inscription
+ * ANNULÉE ne bloque pas une nouvelle tentative : c'est le cas normal de quelqu'un qui
+ * s'est désisté puis revient.
+ *
+ * Un paiement encore ouvert ne se lit plus ici mais sur la commande
+ * (`findPendingMasterclassOrder`) : l'appelant la reprend au lieu d'en ouvrir une
+ * seconde.
  *
  * `premium` lève la seule garde qui ne s'applique pas à un membre du pack : la jauge.
  */
 export async function assertRegistrable(
     masterclass: Masterclass,
-    existing: (MasterclassRegistration & { order: { status: string } | null }) | null,
+    existing: MasterclassRegistration | null,
     options: { premium?: boolean; now?: Date } = {},
 ): Promise<void> {
     const now = options.now ?? new Date();
@@ -295,16 +319,6 @@ export async function assertRegistrable(
         throw new MasterclassError("already_registered", 409, "Vous êtes déjà inscrit à cette Masterclass");
     }
 
-    // Paiement encore ouvert : on ne relance pas une seconde commande, l'appelant
-    // renvoie celle-ci pour que le payeur la termine.
-    if (existing && existing.status === "PENDING" && existing.order?.status === "PENDING") {
-        throw new MasterclassError(
-            "payment_pending",
-            409,
-            "Un paiement est déjà en cours pour cette Masterclass. Terminez-le ou réessayez dans quelques minutes.",
-        );
-    }
-
     // La jauge n'est pas opposée à un membre Premium : sa place lui a été vendue avec
     // le pack, elle ne peut pas lui être refusée parce que la séance affiche complet.
     if (masterclass.capacity !== null && !options.premium) {
@@ -316,26 +330,21 @@ export async function assertRegistrable(
 }
 
 /**
- * Pose (ou rouvre) l'inscription en attente, AVANT d'ouvrir le paiement.
+ * Commande de règlement d'une place ENCORE EN COURS, s'il y en a une.
  *
- * Elle existe donc dès la première tentative : la console voit les inscriptions en
- * cours de règlement, et pas seulement celles qui ont abouti. Le passage à CONFIRMED
- * appartient à `confirmMasterclassRegistration`, déclenché par l'encaissement.
+ * Remplace l'ancienne inscription « en attente » : c'est la commande, et elle seule,
+ * qui porte la trace d'un paiement ouvert. Permet de REPRENDRE un règlement abandonné
+ * plutôt que d'en ouvrir un second, sans rien écrire dans la table des inscriptions.
  */
-export async function openRegistration(input: {
-    userId: string;
-    masterclassId: string;
-    amount: number;
-    currency: string;
-}): Promise<MasterclassRegistration> {
-    const { userId, masterclassId, amount, currency } = input;
-
-    return prisma.masterclassRegistration.upsert({
-        where: { masterclassId_userId: { masterclassId, userId } },
-        create: { masterclassId, userId, amount, currency, status: "PENDING" },
-        // Nouvelle tentative après un abandon : on repart d'une inscription propre,
-        // en conservant la ligne — sa date d'origine reste l'historique du premier essai.
-        update: { amount, currency, status: "PENDING", cancelledAt: null, orderId: null },
+export async function findPendingMasterclassOrder(
+    userId: string,
+    masterclassId: string,
+): Promise<(Order & { items: OrderItem[] }) | null> {
+    return prisma.order.findFirst({
+        where: { userId, status: "PENDING", items: { some: { masterclassId } } },
+        include: { items: true },
+        // La plus récente : c'est celle que le payeur a sous les yeux.
+        orderBy: { createdAt: "desc" },
     });
 }
 

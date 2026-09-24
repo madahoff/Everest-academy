@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth.config";
 import { prisma } from "@/lib/prisma";
 import {
     enrollPremiumMember,
+    findPendingMasterclassOrder,
     getNextMasterclass,
     getRegistrationView,
     rolloverIfDue,
@@ -32,7 +33,7 @@ export async function GET() {
 
     const masterclass = await getNextMasterclass();
     if (!masterclass) {
-        return NextResponse.json({ masterclass: null, registration: null, isPremium: false });
+        return NextResponse.json({ masterclass: null, registration: null, isPremium: false, pendingPayment: null });
     }
 
     const userId = session?.user?.id;
@@ -60,7 +61,22 @@ export async function GET() {
         getRegistrationView(masterclass.id, userId),
     ]);
 
+    // Règlement ouvert sans inscription : plus rien n'est écrit avant l'encaissement,
+    // c'est donc la commande qui porte la tentative en cours. Sans cela, un payeur
+    // revenu sur la page n'aurait aucun moyen de reprendre son paiement.
+    let pendingPayment = null;
+    if (userId && !registration) {
+        const opened = await findPendingMasterclassOrder(userId, masterclass.id);
+        if (opened) {
+            pendingPayment = {
+                orderId: opened.id,
+                paymentUrl: opened.paymentUrl,
+                pollUrl: `/api/orders/${opened.id}`,
+            };
+        }
+    }
+
     // `isPremium` ne change RIEN au droit de s'inscrire — la route d'inscription le
     // relit elle-même. Il ne sert qu'à dire au membre d'où lui vient sa place.
-    return NextResponse.json({ masterclass: offer, registration, isPremium });
+    return NextResponse.json({ masterclass: offer, registration, isPremium, pendingPayment });
 }

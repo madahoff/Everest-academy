@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
-import { getMasterclassById, getRegistrationView, toOffer } from "@/lib/masterclass";
+import {
+    findPendingMasterclassOrder,
+    getMasterclassById,
+    getRegistrationView,
+    toOffer,
+} from "@/lib/masterclass";
 import { isPremiumMember } from "@/lib/premium";
 import { getRequestCurrency } from "@/lib/request-currency";
 
@@ -31,5 +36,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         isPremiumMember(session?.user?.id),
     ]);
 
-    return NextResponse.json({ masterclass: offer, registration, isPremium });
+    // Même règle que sur la prochaine séance : un règlement ouvert n'inscrit pas, il
+    // se lit sur la commande — et reste ainsi reprenable.
+    let pendingPayment = null;
+    const userId = session?.user?.id;
+    if (userId && !registration) {
+        const opened = await findPendingMasterclassOrder(userId, masterclass.id);
+        if (opened) {
+            pendingPayment = { orderId: opened.id, paymentUrl: opened.paymentUrl, pollUrl: `/api/orders/${opened.id}` };
+        }
+    }
+
+    return NextResponse.json({ masterclass: offer, registration, isPremium, pendingPayment });
 }
