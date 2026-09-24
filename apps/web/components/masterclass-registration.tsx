@@ -10,8 +10,10 @@ import {
     Check,
     Clock,
     Crown,
+    Link2,
     Loader2,
     Mail,
+    MapPin,
     Mic,
     AlertTriangle,
 } from "lucide-react";
@@ -22,6 +24,11 @@ import { formatSessionDate, monthLabel } from "@/lib/masterclass-month";
 import { priceLabel, type MasterclassState } from "@/components/masterclass-spotlight";
 
 const CONFIRMED_STATUSES = ["CONFIRMED", "ATTENDED"];
+
+/** Le lieu annoncé est-il un lien de connexion (Zoom, Meet…) plutôt qu'une adresse ? */
+function isUrl(value: string): boolean {
+    return /^https?:\/\/\S+$/i.test(value.trim());
+}
 
 /**
  * Détail d'une Masterclass, et son parcours d'inscription.
@@ -140,12 +147,20 @@ export default function MasterclassRegistration({ masterclassId }: { masterclass
     const failed = registration?.status === "PENDING" && registration.orderStatus === "FAILED";
     const unavailable = !offer.free && offer.price === null;
 
-    // Ni le lieu ni la jauge ne sont annoncés ici : le premier est communiqué à
-    // l'inscrit dans l'e-mail de confirmation, la seconde ne regarde que la console.
-    const facts = [
+    // Le lieu ou lien de connexion n'apparaît qu'une fois la place acquise : l'API ne
+    // le livre qu'à un inscrit. La jauge, elle, ne regarde que la console.
+    const location = registered ? offer.location : null;
+    const facts: { icon: typeof CalendarDays; label: string; value: string; href?: string }[] = [
         { icon: CalendarDays, label: "Date", value: formatSessionDate(offer.scheduledAt) },
         ...(offer.duration ? [{ icon: Clock, label: "Durée", value: offer.duration }] : []),
         { icon: Mic, label: "Formateur", value: offer.instructor },
+        ...(location
+            ? [
+                  isUrl(location)
+                      ? { icon: Link2, label: "Lien de connexion", value: location.trim(), href: location.trim() }
+                      : { icon: MapPin, label: "Lieu", value: location },
+              ]
+            : []),
     ];
 
     return (
@@ -201,14 +216,27 @@ export default function MasterclassRegistration({ masterclassId }: { masterclass
                             Informations pratiques
                         </p>
                         <dl className="divide-y divide-gray-100">
-                            {facts.map(({ icon: Icon, label, value }) => (
+                            {facts.map(({ icon: Icon, label, value, href }) => (
                                 <div key={label} className="flex items-start gap-4 py-5 first:pt-0">
                                     <Icon className="w-4 h-4 text-[#2563EB] shrink-0 mt-1" />
                                     <div>
                                         <dt className="text-[9px] font-bold uppercase tracking-[0.25em] text-gray-400 mb-1">
                                             {label}
                                         </dt>
-                                        <dd className="text-sm font-medium">{value}</dd>
+                                        <dd className="text-sm font-medium">
+                                            {href ? (
+                                                <a
+                                                    href={href}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-[#2563EB] underline break-all hover:text-[#001F3F]"
+                                                >
+                                                    {value}
+                                                </a>
+                                            ) : (
+                                                value
+                                            )}
+                                        </dd>
                                     </div>
                                 </div>
                             ))}

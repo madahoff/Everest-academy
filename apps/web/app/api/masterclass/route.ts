@@ -56,10 +56,9 @@ export async function GET() {
         }
     }
 
-    const [offer, registration] = await Promise.all([
-        toOffer(masterclass, currency),
-        getRegistrationView(masterclass.id, userId),
-    ]);
+    // L'inscription d'abord : c'est elle qui décide si le lien de connexion est livré.
+    const registration = await getRegistrationView(masterclass.id, userId);
+    const offer = await toOffer(masterclass, currency, registration);
 
     // Règlement ouvert sans inscription : plus rien n'est écrit avant l'encaissement,
     // c'est donc la commande qui porte la tentative en cours. Sans cela, un payeur

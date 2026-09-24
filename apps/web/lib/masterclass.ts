@@ -146,6 +146,11 @@ export interface MasterclassOffer {
     instructor: string;
     scheduledAt: string;
     duration: string | null;
+    /**
+     * Lieu ou lien de connexion. Réservé aux INSCRITS : `null` pour tout autre
+     * visiteur, même quand la séance en a un — le lien ne doit pas circuler avant
+     * l'achat de la place.
+     */
     location: string | null;
     coverImage: string | null;
     /** Vidéo de présentation. `null` : aucun lecteur n'est affiché. */
@@ -187,8 +192,17 @@ async function countOccupied(masterclassId: string): Promise<number> {
     });
 }
 
-/** Rend la session publiable côté client, chiffrée dans la devise du visiteur. */
-export async function toOffer(masterclass: Masterclass, currency: Currency): Promise<MasterclassOffer> {
+/**
+ * Rend la session publiable côté client, chiffrée dans la devise du visiteur.
+ *
+ * `registration` est l'inscription du visiteur : seule une place tenue (confirmée ou
+ * honorée) fait figurer le lieu ou lien de connexion dans la réponse.
+ */
+export async function toOffer(
+    masterclass: Masterclass,
+    currency: Currency,
+    registration: Pick<MasterclassRegistrationView, "status"> | null = null,
+): Promise<MasterclassOffer> {
     const view = resolvePrice(
         { price: String(masterclass.price), priceEur: masterclass.priceEur?.toString() },
         currency,
@@ -204,7 +218,7 @@ export async function toOffer(masterclass: Masterclass, currency: Currency): Pro
         instructor: masterclass.instructor,
         scheduledAt: masterclass.scheduledAt.toISOString(),
         duration: masterclass.duration,
-        location: masterclass.location,
+        location: registration && OCCUPYING_STATUSES.includes(registration.status) ? masterclass.location : null,
         coverImage: masterclass.coverImage,
         presentationVideo: masterclass.presentationVideo,
         currency,

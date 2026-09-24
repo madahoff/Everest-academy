@@ -30,11 +30,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
 
     const currency = await getRequestCurrency();
-    const [offer, registration, isPremium] = await Promise.all([
-        toOffer(masterclass, currency),
+    const [registration, isPremium] = await Promise.all([
         getRegistrationView(masterclass.id, session?.user?.id),
         isPremiumMember(session?.user?.id),
     ]);
+    // Le lien de connexion n'est livré qu'à un inscrit : l'offre dépend de l'inscription.
+    const offer = await toOffer(masterclass, currency, registration);
 
     // Même règle que sur la prochaine séance : un règlement ouvert n'inscrit pas, il
     // se lit sur la commande — et reste ainsi reprenable.
