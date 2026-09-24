@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
-import { getNextMasterclass, getRegistrationView, rolloverIfDue, toOffer } from "@/lib/masterclass";
+import { prisma } from "@/lib/prisma";
+import {
+    enrollPremiumMember,
+    getNextMasterclass,
+    getRegistrationView,
+    rolloverIfDue,
+    toOffer,
+} from "@/lib/masterclass";
 import { isPremiumMember } from "@/lib/premium";
 import { getRequestCurrency } from "@/lib/request-currency";
 
@@ -28,10 +35,29 @@ export async function GET() {
         return NextResponse.json({ masterclass: null, registration: null, isPremium: false });
     }
 
-    const [offer, registration, isPremium] = await Promise.all([
+    const userId = session?.user?.id;
+    const isPremium = await isPremiumMember(userId);
+
+    // Membre du Pack Premium : sa place lui a été VENDUE avec le pack. On la
+    // matérialise ici, à la lecture — il voit alors « vous êtes inscrit » plutôt qu'un
+    // bouton de paiement, et il figure dans la liste des inscrits de la console sans
+    // avoir eu à cliquer. Idempotent, donc sans effet dès la deuxième visite.
+    //
+    // Pas de `$transaction` : `enrollPremiumMember` ne pose qu'un `createMany`, et une
+    // transaction ouverte à chaque affichage de la page ne protégerait rien.
+    if (isPremium && userId) {
+        try {
+            await enrollPremiumMember(prisma, userId);
+        } catch (error) {
+            // Une inscription manquée n'empêche pas de consulter la séance, et la
+            // console la rattrape de son côté. On n'échoue jamais sur un affichage.
+            console.error("Inscription d'office du membre Premium échouée", error);
+        }
+    }
+
+    const [offer, registration] = await Promise.all([
         toOffer(masterclass, currency),
-        getRegistrationView(masterclass.id, session?.user?.id),
-        isPremiumMember(session?.user?.id),
+        getRegistrationView(masterclass.id, userId),
     ]);
 
     // `isPremium` ne change RIEN au droit de s'inscrire — la route d'inscription le

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/require-admin"
-import { nextMasterclassId } from "@/lib/masterclass"
+import { nextMasterclassId, syncPremiumIfDue } from "@/lib/masterclass"
 
 export const dynamic = "force-dynamic"
 
@@ -23,6 +23,11 @@ export async function GET(request: Request) {
     if (denied) return denied
 
     const scope = new URL(request.url).searchParams.get("scope") || "next"
+
+    // Le Pack Premium ouvre toutes les séances à venir : on rattrape les membres qui
+    // n'y figurent pas encore avant de dresser la liste, faute de quoi la console
+    // afficherait moins d'inscrits qu'il n'y a d'ayants droit.
+    await syncPremiumIfDue()
 
     try {
         let masterclassId: string | null = null

@@ -306,6 +306,47 @@ export async function enrollAllPremiumMembers(now: Date = new Date()): Promise<P
     return { members: members.length, sessions: sessions.length, created }
 }
 
+/**
+ * Garde-fou de fréquence de la réconciliation paresseuse (voir `syncPremiumIfDue`).
+ *
+ * Elle est idempotente : ce compteur n'est là que pour ne pas rejouer deux requêtes à
+ * chaque rafraîchissement de la console — et pour que les deux listes de la page
+ * (séances et inscriptions), chargées ensemble, n'en déclenchent qu'une. Il vit dans
+ * le processus : un redémarrage le remet à zéro, sans autre conséquence qu'une
+ * réconciliation de plus.
+ */
+let lastPremiumSync = 0
+const PREMIUM_SYNC_INTERVAL_MS = 15 * 1000
+
+/**
+ * Réconciliation paresseuse, déclenchée à la LECTURE de la console Masterclass.
+ *
+ * Les octrois du pack inscrivent désormais d'office (voir plus haut), mais cela ne
+ * vaut que pour l'avenir : les comptes passés en Premium AVANT cet automatisme, eux,
+ * manquent dans les listes. Plutôt que d'exiger une action d'administration, la
+ * console rattrape ce qu'elle trouve au moment où elle l'affiche — la liste qu'elle
+ * montre est donc juste par construction, sans que personne ait à y penser.
+ *
+ * Même principe que le basculement mensuel de la vitrine (`rolloverIfDue`, côté web) :
+ * idempotent, borné, et sans conséquence s'il échoue — d'où l'absence d'erreur
+ * remontée, qui ferait échouer un simple affichage.
+ */
+export async function syncPremiumIfDue(now: Date = new Date()): Promise<void> {
+    if (now.getTime() - lastPremiumSync < PREMIUM_SYNC_INTERVAL_MS) return
+    lastPremiumSync = now.getTime()
+    try {
+        const report = await enrollAllPremiumMembers(now)
+        if (report.created > 0) {
+            console.info(
+                `Masterclass : ${report.created} inscription(s) Premium rattrapée(s) ` +
+                `(${report.members} membre(s), ${report.sessions} séance(s) à venir)`,
+            )
+        }
+    } catch (error) {
+        console.error("Réconciliation des inscriptions Premium échouée", error)
+    }
+}
+
 /** Traduit une collision de clé unique Prisma en message lisible. */
 export function uniqueMonthError(error: unknown): string | null {
     const code = (error as { code?: string })?.code

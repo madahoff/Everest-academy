@@ -6,6 +6,7 @@ import {
     enrollPremiumMembers,
     nextMasterclassId,
     parseMasterclassInput,
+    syncPremiumIfDue,
     uniqueMonthError,
 } from "@/lib/masterclass"
 
@@ -59,6 +60,10 @@ function serialize(masterclass: any, nextId: string | null) {
 export async function GET() {
     const denied = await requireAdmin()
     if (denied) return denied
+
+    // Les membres du Pack Premium manquants sont rattrapés AVANT la lecture : les
+    // compteurs d'inscrits affichés ci-dessous tiennent alors compte d'eux.
+    await syncPremiumIfDue()
 
     try {
         const [masterclasses, nextId] = await Promise.all([
