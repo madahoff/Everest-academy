@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { FileUpload } from "@/components/ui/file-upload"
+import { getUploadManager } from "@/lib/media-upload/client"
+import { useSlotsBusy } from "@/lib/media-upload/client/hooks"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 
 interface SectionFormData {
@@ -31,6 +33,15 @@ export function SectionFormDialog({ courseId, onSuccess, trigger, editData }: Se
     const [open, setOpen] = React.useState(false)
     const [loading, setLoading] = React.useState(false)
     const isEdit = !!editData
+
+    // Emplacement stable de chaque média : l'envoi se retrouve après fermeture du dialogue,
+    // et se rattache de lui-même au contenu quand celui-ci existe déjà.
+    const media = (field: string, name: string) => ({
+        slotKey: `section:${editData?.id ?? `new:${courseId}`}:${field}`,
+        target: { entity: "section" as const, id: editData?.id, field, label: `${editData ? `Section « ${editData.title} »` : "Nouvelle section"} — ${name}` },
+    })
+    // À la création, le contenu ne peut pas être enregistré avant que ses médias soient arrivés.
+    const uploading = useSlotsBusy(`section:new:${courseId}:`) && !isEdit
 
     const { register, handleSubmit, reset, setValue, watch, control, formState: { errors } } = useForm<SectionFormData>({
         defaultValues: editData || {
@@ -63,7 +74,14 @@ export function SectionFormDialog({ courseId, onSuccess, trigger, editData }: Se
                 throw new Error(error.error || "Échec de l'opération")
             }
 
-            if (!isEdit) reset()
+            if (!isEdit) {
+                reset()
+                // `reset()` ne vide pas les champs médias, absents des valeurs par défaut :
+                // sans cela, le formulaire vierge suivant garderait les médias du contenu créé.
+                ;(["heroImage", "cardImage", "video"] as const).forEach((name) => setValue(name, ""))
+            }
+            // Contenu créé : ses médias sont enregistrés, ils n'ont plus à être proposés au prochain formulaire vierge.
+            if (!isEdit) getUploadManager().forgetSlots(`section:new:${courseId}:`)
             setOpen(false)
             onSuccess?.()
         } catch (error) { toast.error(error instanceof Error ? error.message : "Erreur") }
@@ -156,6 +174,7 @@ export function SectionFormDialog({ courseId, onSuccess, trigger, editData }: Se
                                     value={watch("heroImage")}
                                     onChange={(url) => setValue("heroImage", url)}
                                     type="hero"
+                                    {...media("heroImage", "Image hero")}
                                     label="Image Hero"
                                 />
                                 <input type="hidden" {...register("heroImage", { required: "L'image hero est obligatoire" })} />
@@ -170,6 +189,7 @@ export function SectionFormDialog({ courseId, onSuccess, trigger, editData }: Se
                                     value={watch("cardImage")}
                                     onChange={(url) => setValue("cardImage", url)}
                                     type="card"
+                                    {...media("cardImage", "Image carte")}
                                     label="Image Carte"
                                 />
                                 <input type="hidden" {...register("cardImage", { required: "L'image card est obligatoire" })} />
@@ -185,6 +205,7 @@ export function SectionFormDialog({ courseId, onSuccess, trigger, editData }: Se
                                 value={watch("video")}
                                 onChange={(url) => setValue("video", url)}
                                 type="video"
+                                {...media("video", "Vidéo pédagogique")}
                                 label="Vidéo pédagogique"
                             />
                             <input type="hidden" {...register("video", { required: "La vidéo est obligatoire" })} />
@@ -203,10 +224,10 @@ export function SectionFormDialog({ courseId, onSuccess, trigger, editData }: Se
                         </button>
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || uploading}
                             className="flex-1 py-3 bg-[#2563EB] text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#001F3F] transition-all disabled:opacity-50"
                         >
-                            {loading ? "Enregistrement..." : isEdit ? "Sauvegarder" : "Créer la section"}
+                            {loading ? "Enregistrement..." : uploading ? "Envoi des médias en cours…" : isEdit ? "Sauvegarder" : "Créer la section"}
                         </button>
                     </div>
                 </form>

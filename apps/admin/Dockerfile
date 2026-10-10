@@ -30,7 +30,11 @@ ENV NODE_ENV=production
 RUN pnpm turbo run build --filter=admin
 
 FROM node:20-slim AS runner
-RUN apt-get update -y && apt-get install -y openssl ca-certificates
+# ffmpeg : contrôle des vidéos envoyées depuis la console et conversion de celles
+# qu'un navigateur ne lit pas (HEVC d'iPhone…). Sans lui, les vidéos sont acceptées
+# telles quelles, sans vérification ni conversion.
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -13,6 +13,9 @@ const MIME_TYPES: Record<string, string> = {
     ".mp4": "video/mp4",
     ".webm": "video/webm",
     ".mov": "video/quicktime",
+    ".m4v": "video/mp4",
+    ".avif": "image/avif",
+    ".pdf": "application/pdf",
 }
 // Seuil pour le streaming progressif (10 MB)
 // En dessous: on charge tout le fichier d'un coup
@@ -25,6 +28,11 @@ export async function GET(
 ) {
     const { path } = await params
     const filePath = path.join("/")
+
+    // Les dossiers pointés (transferts en cours dans `.tmp`) ne sont jamais servis.
+    if (path.some((segment) => segment.startsWith("."))) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
 
     // Determine the project root
     let projectRoot = process.cwd()

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { FileUpload } from "@/components/ui/file-upload"
+import { getUploadManager } from "@/lib/media-upload/client"
+import { useSlotsBusy } from "@/lib/media-upload/client/hooks"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { fromLocalInput, monthKeyOf, monthLabel, toLocalInput } from "@/lib/masterclass-month"
 import { parsePriceEur } from "@/lib/pricing"
@@ -91,6 +93,15 @@ export function MasterclassFormDialog({
     const [form, setForm] = React.useState(EMPTY)
     const [error, setError] = React.useState<string | null>(null)
 
+    // Emplacement stable de chaque média : l'envoi se retrouve après fermeture du dialogue,
+    // et se rattache de lui-même au contenu quand celui-ci existe déjà.
+    const media = (field: string, name: string) => ({
+        slotKey: `masterclass:${masterclass?.id ?? "new"}:${field}`,
+        target: { entity: "masterclass" as const, id: masterclass?.id, field, label: `${masterclass ? `Masterclass « ${masterclass.title} »` : "Nouvelle Masterclass"} — ${name}` },
+    })
+    // À la création, le contenu ne peut pas être enregistré avant que ses médias soient arrivés.
+    const uploading = useSlotsBusy("masterclass:new:") && !masterclass
+
     // Rempli à l'ouverture seulement : rouvrir après une modification doit repartir
     // des valeurs enregistrées, pas d'une saisie abandonnée.
     React.useEffect(() => {
@@ -157,6 +168,8 @@ export function MasterclassFormDialog({
             if (!res.ok) throw new Error(body.error || "Échec de l'enregistrement")
 
             toast.success(masterclass ? "Masterclass mise à jour" : "Masterclass programmée")
+            // Contenu créé : ses médias sont enregistrés, ils n'ont plus à être proposés au prochain formulaire vierge.
+            if (!masterclass) getUploadManager().forgetSlots("masterclass:new:")
             setOpen(false)
             onSuccess?.()
         } catch (err) {
@@ -315,6 +328,7 @@ export function MasterclassFormDialog({
                             value={form.presentationVideo}
                             onChange={(url) => set("presentationVideo")(url)}
                             type="video"
+                            {...media("presentationVideo", "Vidéo de présentation")}
                             label="Envoyer une vidéo"
                         />
 
@@ -363,11 +377,11 @@ export function MasterclassFormDialog({
                         </button>
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || uploading}
                             className="px-6 py-3 bg-[#050505] text-white text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2 hover:bg-[#2563EB] transition-all disabled:opacity-50"
                         >
                             {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                            {masterclass ? "Enregistrer" : "Programmer"}
+                            {uploading ? "Envoi de la vidéo en cours…" : masterclass ? "Enregistrer" : "Programmer"}
                         </button>
                     </div>
                 </form>

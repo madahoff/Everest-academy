@@ -1,6 +1,7 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
+import { toast } from "sonner"
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -14,6 +15,24 @@ import {
     Image as ImageIcon,
 } from 'lucide-react'
 import { Toggle } from "@/components/ui/toggle"
+import { getUploadManager } from "@/lib/media-upload/client"
+
+/**
+ * Envoie une image par le gestionnaire d'envois puis l'insère par son adresse. Elle
+ * n'est plus incrustée en base64 dans le texte : le contenu enregistré reste léger et
+ * l'image, optimisée, est servie comme n'importe quel média.
+ */
+function insertUploadedImage(file: File, insert: (src: string) => boolean | undefined) {
+    const manager = getUploadManager()
+    const [id] = manager.add([file], { kind: "misc" })
+    const notice = toast.loading(`Envoi de l'image ${file.name}…`)
+    void manager.whenSettled(id).then((task) => {
+        toast.dismiss(notice)
+        if (task.status !== "done" || !task.url) return
+        // Éditeur refermé entre-temps : l'image reste disponible dans le panneau des envois.
+        if (!insert(task.url)) toast.info("L'éditeur a été fermé : le lien de l'image est disponible dans le panneau des envois.")
+    })
+}
 
 interface RichTextEditorProps {
     value: string
@@ -55,15 +74,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
                     if (item.type.startsWith('image/')) {
                         const file = item.getAsFile()
                         if (file) {
-                            const reader = new FileReader()
-                            reader.onload = (ev) => {
-                                const src = ev.target?.result as string
-                                // Delaying slightly ensures TipTap's standard paste handler doesn't conflict
-                                setTimeout(() => {
-                                    editor?.chain().focus().setImage({ src, alt: file.name }).run()
-                                }, 10)
-                            }
-                            reader.readAsDataURL(file)
+                            insertUploadedImage(file, (src) => insertImage(src, file.name))
                             event.preventDefault()
                             return true
                         }
@@ -77,16 +88,23 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         },
     })
 
+    // L'envoi d'une image aboutit plus tard : on passe par une référence pour retrouver
+    // l'éditeur du moment, ou constater qu'il a été refermé.
+    const editorRef = useRef(editor)
+    useEffect(() => {
+        editorRef.current = editor
+    }, [editor])
+    const insertImage = (src: string, alt: string) => {
+        const current = editorRef.current
+        if (!current || current.isDestroyed) return false
+        return current.chain().focus().setImage({ src, alt }).run()
+    }
+
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file || !editor) return
 
-        const reader = new FileReader()
-        reader.onload = (ev) => {
-            const src = ev.target?.result as string
-            editor.chain().focus().setImage({ src, alt: file.name }).run()
-        }
-        reader.readAsDataURL(file)
+        insertUploadedImage(file, (src) => insertImage(src, file.name))
         // Reset so the same file can be re-uploaded
         e.target.value = ""
     }

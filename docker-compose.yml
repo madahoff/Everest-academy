@@ -41,10 +41,16 @@ services:
       # Adresse publique de la vitrine, pour les liens des e-mails de confirmation.
       - APP_PUBLIC_URL=${WEB_URL}
       - REPORTING_TIMEZONE=${REPORTING_TIMEZONE:-Indian/Antananarivo}
-      # Plafonds d'envoi de médias depuis la console. Au-delà, la console refuse
-      # proprement (413) au lieu de saturer la mémoire du conteneur.
+      # Plafonds d'envoi de médias depuis la console, appliqués APRÈS la compression
+      # faite dans le navigateur. Les fichiers arrivent par morceaux écrits sur disque :
+      # ces plafonds protègent l'espace de stockage, plus la mémoire du conteneur.
       - MAX_VIDEO_UPLOAD_MB=${MAX_VIDEO_UPLOAD_MB:-200}
       - MAX_IMAGE_UPLOAD_MB=${MAX_IMAGE_UPLOAD_MB:-10}
+      # Envoi reprenable : taille des morceaux, transferts menés de front, et durée
+      # pendant laquelle un envoi interrompu peut encore être repris.
+      - UPLOAD_CHUNK_MB=${UPLOAD_CHUNK_MB:-5}
+      - UPLOAD_MAX_CONCURRENT=${UPLOAD_MAX_CONCURRENT:-2}
+      - UPLOAD_SESSION_TTL_HOURS=${UPLOAD_SESSION_TTL_HOURS:-24}
     volumes:
       - shared_uploads:/app/apps/admin/public/uploads
     ports:

@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileUpload } from "@/components/ui/file-upload"
+import { getUploadManager } from "@/lib/media-upload/client"
+import { useSlotsBusy } from "@/lib/media-upload/client/hooks"
 import { parsePriceEur } from "@/lib/pricing"
 
 interface CourseFormData {
@@ -39,6 +41,15 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
     const [open, setOpen] = React.useState(false)
     const [loading, setLoading] = React.useState(false)
     const isEdit = !!editData
+
+    // Emplacement stable de chaque média : l'envoi se retrouve après fermeture du dialogue,
+    // et se rattache de lui-même au contenu quand celui-ci existe déjà.
+    const media = (field: string, name: string) => ({
+        slotKey: `course:${editData?.id ?? "new"}:${field}`,
+        target: { entity: "course" as const, id: editData?.id, field, label: `${editData ? `Cours « ${editData.title} »` : "Nouveau cours"} — ${name}` },
+    })
+    // À la création, le contenu ne peut pas être enregistré avant que ses médias soient arrivés.
+    const uploading = useSlotsBusy("course:new:") && !isEdit
 
     const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CourseFormData>({
         defaultValues: editData || { status: "DRAFT", price: 0, priceEur: "", duration: "Variable", level: "INTERMEDIATE" }
@@ -77,7 +88,14 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
                 throw new Error(error.error || "Échec de l'opération")
             }
 
-            if (!isEdit) reset()
+            if (!isEdit) {
+                reset()
+                // `reset()` ne vide pas les champs médias, absents des valeurs par défaut :
+                // sans cela, le formulaire vierge suivant garderait les médias du contenu créé.
+                ;(["heroImage", "cardImage", "welcomeVideo"] as const).forEach((name) => setValue(name, ""))
+            }
+            // Contenu créé : ses médias sont enregistrés, ils n'ont plus à être proposés au prochain formulaire vierge.
+            if (!isEdit) getUploadManager().forgetSlots("course:new:")
             setOpen(false)
             onSuccess?.()
         } catch (error) { toast.error(error instanceof Error ? error.message : "Erreur") }
@@ -149,6 +167,7 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
                                     value={watch("heroImage")}
                                     onChange={(url) => setValue("heroImage", url)}
                                     type="hero"
+                                    {...media("heroImage", "Image hero")}
                                     label="Image Hero"
                                 />
                                 <input type="hidden" {...register("heroImage", { required: "L'image hero est obligatoire" })} />
@@ -163,6 +182,7 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
                                     value={watch("cardImage")}
                                     onChange={(url) => setValue("cardImage", url)}
                                     type="card"
+                                    {...media("cardImage", "Image carte")}
                                     label="Image Carte"
                                 />
                                 <input type="hidden" {...register("cardImage", { required: "L'image card est obligatoire" })} />
@@ -178,6 +198,7 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
                                 value={watch("welcomeVideo")}
                                 onChange={(url) => setValue("welcomeVideo", url)}
                                 type="video"
+                                {...media("welcomeVideo", "Vidéo de bienvenue")}
                                 label="Vidéo de bienvenue"
                             />
                             <input type="hidden" {...register("welcomeVideo", { required: "La vidéo de bienvenue est obligatoire" })} />
@@ -292,10 +313,10 @@ export function CourseFormDialog({ onSuccess, trigger, editData }: CourseFormDia
                         </button>
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || uploading}
                             className="flex-1 py-3 bg-[#050505] text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#2563EB] transition-all disabled:opacity-50"
                         >
-                            {loading ? "Enregistrement..." : isEdit ? "Sauvegarder" : "Créer le cours"}
+                            {loading ? "Enregistrement..." : uploading ? "Envoi des médias en cours…" : isEdit ? "Sauvegarder" : "Créer le cours"}
                         </button>
                     </div>
                 </form>

@@ -6,6 +6,7 @@ import {
     SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Bell, Search, UserCircle, LogOut } from "lucide-react"
+import { UploadCenter } from "@/components/uploads/upload-center"
 import { auth, signOut } from "@/auth"
 import { redirect } from "next/navigation"
 
@@ -49,6 +50,8 @@ export default async function DashboardLayout({
 
                         {/* Actions de droite : Profil & Notifs */}
                         <div className="flex items-center gap-6">
+                            <UploadCenter />
+
                             {/* <div className="hidden sm:flex items-center gap-4 border-r border-gray-100 pr-6">
                                 <button className="text-gray-400 hover:text-[#2563EB] transition-colors">
                                     <Search className="w-4 h-4" />
