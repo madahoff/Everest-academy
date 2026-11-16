@@ -1,0 +1,108 @@
+# Déploiement sur le serveur local (Dokploy), exposé par un tunnel Cloudflare
+# qui aboutit sur le Traefik de Dokploy.
+#
+# Différences avec docker-compose.yml (celui du VPS) :
+#  - pas de labels Traefik écrits à la main : les domaines se déclarent dans l'onglet
+#    Domains de Dokploy, HTTPS désactivé — le serveur n'a pas d'IP publique, Let's
+#    Encrypt ne pourrait pas valider. HTTPS est assuré par Cloudflare ;
+#  - pas de ports publiés : Traefik joint web et admin par le réseau Docker. Cela
+#    évite aussi le conflit avec le port 3000 de l'interface Dokploy ;
+#  - pas de montage de database/init.sql : la base est restaurée depuis un dump.
+#
+# Dans Dokploy : Compose Path = ./docker-compose.local.yml
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${DB_HOST}
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - everest-network
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=mysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:3306/${DB_NAME}
+      - NODE_ENV=production
+      - AUTH_SECRET=${AUTH_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${ADMIN_URL}
+      - AUTH_TRUST_HOST=true
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - APP_PUBLIC_URL=${WEB_URL}
+      - REPORTING_TIMEZONE=${REPORTING_TIMEZONE:-Indian/Antananarivo}
+      - MAX_VIDEO_UPLOAD_MB=${MAX_VIDEO_UPLOAD_MB:-200}
+      - MAX_IMAGE_UPLOAD_MB=${MAX_IMAGE_UPLOAD_MB:-10}
+      - UPLOAD_CHUNK_MB=${UPLOAD_CHUNK_MB:-5}
+      - UPLOAD_MAX_CONCURRENT=${UPLOAD_MAX_CONCURRENT:-2}
+      - UPLOAD_SESSION_TTL_HOURS=${UPLOAD_SESSION_TTL_HOURS:-24}
+    volumes:
+      - shared_uploads:/app/apps/admin/public/uploads
+    networks:
+      - everest-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=mysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:3306/${DB_NAME}
+      - NODE_ENV=production
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${WEB_URL}
+      - AUTH_TRUST_HOST=true
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - MAGIC_LINK_TTL_MINUTES=${MAGIC_LINK_TTL_MINUTES:-15}
+      - MAGIC_LINK_RATE_LIMIT_MAX=${MAGIC_LINK_RATE_LIMIT_MAX:-3}
+      - MAGIC_LINK_RATE_LIMIT_WINDOW_MINUTES=${MAGIC_LINK_RATE_LIMIT_WINDOW_MINUTES:-15}
+      - MAGIC_LINK_RESEND_COOLDOWN_SECONDS=${MAGIC_LINK_RESEND_COOLDOWN_SECONDS:-60}
+      - WALLET_API_URL=${WALLET_API_URL}
+      - WALLET_API_KEY=${WALLET_API_KEY}
+      - APP_PUBLIC_URL=${WEB_URL}
+      # Derrière Cloudflare, `cf-ipcountry` fournit le pays : GEO_LOOKUP_URL ne sert
+      # plus qu'en secours.
+      - GEO_LOOKUP_URL=${GEO_LOOKUP_URL:-}
+      - GEO_FORCE_COUNTRY=${GEO_FORCE_COUNTRY:-}
+      - CRON_SECRET=${CRON_SECRET:-}
+      - REPORTING_TIMEZONE=${REPORTING_TIMEZONE:-Indian/Antananarivo}
+    volumes:
+      - shared_uploads:/app/apps/web/public/uploads
+    networks:
+      - everest-network
+
+volumes:
+  mysql_data:
+    driver: local
+  shared_uploads:
+    driver: local
+
+networks:
+  everest-network:
+    driver: bridge
